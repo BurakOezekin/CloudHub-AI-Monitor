@@ -27,6 +27,7 @@ appsettings.Development.json
 local/
 data/
 diagnostics/
+reports/
 logs/
 *.log
 *.etl
