@@ -1,143 +1,141 @@
 # CloudHub AI Monitor
 
-Ein Lernprojekt für Windows-Monitoring und Cloud-Betrieb mit C# und ASP.NET Core. Ein C#-Agent sendet drei Prozentwerte an eine lokale API. Im Web-Dashboard siehst du aktuelle Messwerte, ihren Verlauf und Warnungen.
+Windows-Monitoring mit C#, ASP.NET Core und einem lokalen Web-Dashboard. Ein Agent erfasst die Auslastung des Rechners. Das Backend nimmt die Messwerte über eine REST-API entgegen, prüft Warnschwellen und zeigt den Verlauf im Browser.
 
-## Lokal ausprobieren
+Der optionale PC-Assistent fasst eine Minute Messdaten zusammen. Vor einer Analyse mit OpenRouter lässt sich die vollständige Anfrage prüfen.
 
-Voraussetzung ist das .NET-10-SDK. Öffne PowerShell im Projektordner.
+![CloudHub-Dashboard mit fiktiven Messwerten und Demo-Prozessen](docs/assets/dashboard-demo.png)
+
+*Die Abbildung verwendet ausschließlich fiktive Messwerte, Prozessnamen und Prozess-IDs.*
+
+## Funktionen
+
+- CPU-Auslastung, RAM-Belegung und belegter Speicherplatz des Windows-Systemlaufwerks.
+- Prozessübersicht mit den jeweils fünf größten Verbrauchern nach CPU und RAM.
+- Dashboard mit automatischer Aktualisierung, kurzem Verlauf und Warnungen.
+- 60-Sekunden-PC-Check mit Fragefeld, Datenvorschau und optionaler KI-Analyse.
+- Vergleich der Durchschnittswerte zweier Checks innerhalb einer Browsersitzung.
+
+## Architektur
+
+```mermaid
+flowchart LR
+    W[Windows-System] --> A[C# Agent]
+    A -->|HTTP POST /api/metrics| API[ASP.NET Core API]
+    API --> M[(Arbeitsspeicher)]
+    B[Web-Dashboard] -->|HTTP GET /api/dashboard| API
+    API -->|Messwerte und Warnungen| B
+    B -->|Geprüfte Analyse anfordern| API
+    API -->|Optional| O[OpenRouter]
+```
+
+Agent und Backend laufen als getrennte Prozesse. Das Dashboard wird von derselben API ausgeliefert und benötigt keinen eigenen JavaScript-Build. Das Backend kann für Docker gebaut werden, während der Agent weiterhin auf Windows misst.
+
+## Lokal starten
+
+Voraussetzungen sind Windows für den Agenten, das [.NET-10-SDK](https://dotnet.microsoft.com/download/dotnet/10.0) und PowerShell. Die Befehle werden im Projektordner ausgeführt.
+
+Im ersten Terminal die API starten.
 
 ```powershell
 dotnet build
-dotnet run --project .\src\CloudHub.Api -- --urls http://127.0.0.1:5080
+dotnet run --project .\src\CloudHub.Api -- --urls http://127.0.0.1:5081
 ```
 
-Lass dieses Terminal geöffnet. Rufe den Endpunkt in einem zweiten Terminal auf.
+Im zweiten Terminal den Agenten starten und das Fenster geöffnet lassen.
 
 ```powershell
-curl.exe -i http://127.0.0.1:5080/health
+.\scripts\Start-Agent.ps1 -Port 5081
 ```
 
-Erwartet werden der HTTP-Status `200 OK`, der Inhaltstyp `application/json` und der Antworttext `{"status":"ok"}`. Öffne anschließend [das Dashboard](http://127.0.0.1:5080/) im Browser. Die Startseite zeigt zunächst „Warte auf Agent“. Sobald du Daten sendest, aktualisiert sie sich alle fünf Sekunden. Mit `Strg+C` im ersten Terminal beendest du die API.
+Das Dashboard ist unter [http://127.0.0.1:5081](http://127.0.0.1:5081) erreichbar. Nach der ersten Messung erscheinen die Werte. Mit `Strg+C` lässt sich der jeweilige Prozess beenden.
 
-## Einen CPU-Messwert senden und wieder lesen
+## API ausprobieren
 
-Rufe direkt nach dem Start `curl.exe -i http://127.0.0.1:5080/api/metrics/latest` auf. Du bekommst `404 Not Found`, weil der Speicher noch leer ist.
-
-```powershell
-$url = 'http://127.0.0.1:5080/api/metrics'
-Invoke-RestMethod -Method Post -Uri $url -ContentType 'application/json' -Body '{"cpuPercent":42.5}'
-Invoke-RestMethod -Uri "$url/latest"
-```
-
-Beide Aufrufe liefern denselben CPU-Wert. Mit `POST` sendest du Daten im Anfragekörper, mit `GET` liest du den aktuellen Stand. PowerShell zeigt die JSON-Antwort als Objekt an. Im Browser kannst du `http://127.0.0.1:5080/api/metrics/latest` öffnen, um das JSON direkt zu sehen.
-
-Wiederhole den POST mit `73` und aktualisiere den Browser. Versuche anschließend `120`. Die API antwortet darauf mit `400 Bad Request` und liefert beim nächsten GET weiterhin `73`. Nach einem Neustart ist der Speicher wieder leer.
-
-## Windows-Agent ausprobieren
-
-Bei einer bereits laufenden API auf Port 5081 startet `.\scripts\Start-Agent.ps1 -Port 5081` im Projektordner den Agenten mit der passenden Zieladresse. Lass dieses PowerShell-Fenster geöffnet. Für den folgenden Start auf Port 5080 kannst du entsprechend `-Port 5080` verwenden.
-
-Starte die API wie oben beschrieben und öffne ein zweites PowerShell-Terminal im Projektordner. Dieser Aufruf misst einmal und beendet den Agenten nach dem Senden.
-
-```powershell
-dotnet run --project .\src\CloudHub.Agent -- --once
-Invoke-RestMethod 'http://127.0.0.1:5080/api/metrics/latest'
-```
-
-Ohne `-- --once` misst der Agent fortlaufend etwa alle fünf Sekunden. Mit `Strg+C` in seinem Terminal stoppst du ihn. Öffne parallel den Windows-Task-Manager unter **Leistung** und vergleiche CPU und Arbeitsspeicher grob. Die CPU-Anzeigen können durch unterschiedliche Messverfahren und Zeitfenster abweichen.
-
-| JSON-Feld | Was der Agent misst | Wie du den Wert einordnest |
+| Methode | Pfad | Aufgabe |
 | --- | --- | --- |
-| `cpuPercent` | Anteil der beschäftigten CPU-Zeit über eine Sekunde | Der Agent liest die kumulierten Windows-Zähler zweimal. Die Leerlaufzeit wird von der Gesamtzeit im Intervall abgezogen. |
-| `ramPercent` | Aktuell belegter Anteil des physischen RAM | Windows liefert den ungefähren Prozentwert über `GlobalMemoryStatusEx`. |
-| `diskUsedPercent` | Belegter Speicherplatz auf dem Windows-Systemlaufwerk | Vergleiche Gesamtkapazität und freien Platz im Explorer unter **Dieser PC**. |
+| GET | `/health` | Erreichbarkeit prüfen |
+| POST | `/api/metrics` | Messung validieren und übernehmen |
+| GET | `/api/metrics/latest` | Letzte gültige Messung abrufen |
+| GET | `/api/dashboard` | Verlauf und Warnungen abrufen |
+| POST | `/api/checks` | PC-Check beginnen |
+| POST | `/api/checks/{id}/preview` | Diagnosevorschau erstellen |
+| POST | `/api/checks/{id}/analyze` | Geprüfte Vorschau an OpenRouter senden |
 
-Der HTTP-Anfragekörper enthält die drei Systemwerte und die lokal erfassten Top-Prozesse. Der Agent benutzt die feste Loopback-Adresse `127.0.0.1`. Die API ergänzt die Empfangszeit. Der Verlauf zeigt bis zu zwei Minuten und umfasst maximal 120 Messpunkte. Die letzte gültige Messung bleibt bis zum Neustart abrufbar. Die Daten liegen im Arbeitsspeicher.
-
-## Warnung im Dashboard testen
-
-Pausiere für diesen Versuch den Agenten mit `Strg+C` in seinem Terminal, damit er den Testwert nicht gleich überschreibt. Sende in PowerShell eine fiktive Messung.
+Der Datenfluss lässt sich mit fiktiven Werten testen. Pausiere dafür den Agenten, damit er den Testwert nicht sofort ersetzt.
 
 ```powershell
-Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:5080/api/metrics' -ContentType 'application/json' -Body '{"cpuPercent":20,"ramPercent":85,"diskUsedPercent":50}'
+Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:5081/api/metrics' -ContentType 'application/json' -Body '{"cpuPercent":25,"ramPercent":85,"diskUsedPercent":42}'
+Invoke-RestMethod 'http://127.0.0.1:5081/api/metrics/latest'
 ```
 
-Beim nächsten Abruf zeigt das Dashboard „Arbeitsspeicher erhöht“. Wiederhole den Aufruf mit `84.9` für RAM, um die Warnung aufzuheben. Die Startwerte für die Regeln sind CPU ≥ 90 %, RAM ≥ 85 % und belegter Speicherplatz ≥ 90 %. Nach 15 Sekunden ohne neue Messung kennzeichnet die Oberfläche den letzten Stand als veraltet.
+Bei RAM ≥ 85 % erscheint eine Warnung. Für CPU und belegten Speicherplatz liegt die Schwelle jeweils bei 90 %. Ungültige Prozentwerte führen zu `400 Bad Request`. Vor der ersten Messung liefert `/api/metrics/latest` den Status `404`.
 
-## PC-Assistent mit OpenRouter
+## Optionaler PC-Assistent
 
-Die Prozessliste zeigt die jeweils fünf größten Verbraucher nach CPU und RAM. CPU-Prozentwerte beziehen sich auf die gesamte CPU-Kapazität. RAM wird als Working Set gemessen. Gemeinsam genutzte Speicherseiten können in mehreren Prozessen enthalten sein. Die Liste ist deshalb keine Aufteilung des gesamten RAM. Geschützte oder inzwischen beendete Prozesse können fehlen. In einer eingeschränkten Ausführungsumgebung ist nur eine Teilmenge der Prozesse sichtbar.
+Das Monitoring funktioniert ohne OpenRouter-Key. Für die Analyse lässt sich ein Schlüssel lokal einrichten.
 
-1. Beschreibe dein Problem im Fragefeld.
-2. Wähle eines der kostenlosen Modelle. Vorausgewählt ist Recursive Flint. Alternativ stehen Xing4.0 29B A4B und Nemotron 3.5 Super VL zur Auswahl. Alle verwenden ihre `:free`-Modell-ID. Kostenpflichtige Modelle werden im Backend abgewiesen.
-3. Starte den 60-Sekunden-PC-Check. Der Agent muss währenddessen laufen.
-4. Prüfe die eingefrorene Vorschau. Die Anfrage enthält die Frage, Durchschnitts- und Spitzenwerte, die Anzahl von Stichproben über Warnschwellen sowie Prozess-Aliase mit Spitzenwerten. Die Zuordnung mit Namen und PIDs bleibt lokal.
-5. Bestätige die Vorschau und klicke auf **Mit OpenRouter analysieren**. Nach einem Verbindungs- oder Anbieterfehler kannst du die gleiche Vorschau innerhalb ihrer Gültigkeit erneut senden. Nach Erfolg ist sie verbraucht. Gleichzeitige Anfragen mit derselben Vorschau sind gesperrt.
-6. Prüfe die Antwort und setze eine passende Änderung selbst um. Starte unter vergleichbarer Last erneut einen Check. Das Dashboard vergleicht Durchschnittswerte mit dem vorigen Check auf dieser Seite. Neuladen löscht den Vergleich.
+```powershell
+.\scripts\Set-OpenRouter.ps1
+```
 
-Eine Rückfrage stellst du durch Anpassen des Fragefelds und einen neuen Check. Die API sendet die neue Frage und die aktuelle Zusammenfassung. Die Antwort wird als Text dargestellt.
+Das Skript fragt den Schlüssel verdeckt ab und speichert ihn in `src/CloudHub.Api/appsettings.Local.json`. Anschließend die API neu starten. Die Datei ist durch Git ausgeschlossen und wird beim Publish ausgelassen. Alternativ unterstützt das Backend `OPENROUTER_API_KEY` oder `OpenRouter__ApiKey` als Umgebungsvariable.
 
-### Schlüssel lokal einrichten
+Im Dashboard eine Frage eingeben, ein kostenloses Modell auswählen und den 60-Sekunden-Check starten. Der Agent muss währenddessen laufen. Danach zeigt die Vorschau genau die Anfrage, die durch den Analyse-Button versendet wird.
 
-Führe im Projektordner `.\scripts\Set-OpenRouter.ps1` aus. Das Skript fragt den Schlüssel verdeckt ab und speichert ihn in `src/CloudHub.Api/appsettings.Local.json`. Diese Datei ist ignoriert und wird beim Publish ausgeschlossen. Starte anschließend die API neu. Eine vorhandene Konfiguration überschreibt das Skript nicht.
+Prozessnamen und PIDs werden für diese Anfrage durch Aliase ersetzt. Die Zuordnung bleibt lokal sichtbar. **Der selbst eingegebene Fragetext wird vollständig übertragen.** Persönliche Angaben sollten vor der Vorschau entfernt werden.
 
-Alternativ unterstützt das Backend die Umgebungsvariablen `OPENROUTER_API_KEY` und `OpenRouter__ApiKey`. Bei Docker wird der Schlüssel zur Laufzeit als Umgebungsvariable gesetzt, etwa mit `--env OPENROUTER_API_KEY`, wenn sie im startenden Terminal gesetzt ist. Das Image enthält die lokale Schlüsseldatei aufgrund der eingeschränkten Docker-Build-Dateiliste nicht.
+Vorausgewählt ist `recursive/flint-v1.0:free`. Dieses Modell lieferte im Funktionstest mit fiktiven Daten eine vollständige Antwort bei gemeldeten Kosten von 0. Der Test erforderte deaktiviertes Zero Data Retention. Der ZDR-Haken ist zunächst aktiviert und kann vor der Messung bewusst entfernt werden.
 
-Das Dashboard meldet nur, ob ein Schlüssel vorhanden ist. Die Gültigkeit wird erst beim Modellaufruf sichtbar. Deine eigene Frage wird vollständig mitgesendet. Entferne vor der Vorschau private Angaben aus deinem Text.
+`data_collection: deny` bleibt auch ohne ZDR aktiv. Die Anbieterbedingungen und Kontoeinstellungen gelten weiterhin. Die Anwendung erlaubt ausschließlich die aufgeführten kostenlosen Modelle und fordert Preisobergrenzen von 0 an. Nutzungslimits, regionale Einschränkungen oder Datenschutzvorgaben können einen Aufruf verhindern. [OpenRouter-Anbieterwahl](https://openrouter.ai/docs/guides/routing/provider-selection)
 
-Standardmäßig ist **Streng: nur Anbieter ohne Datenspeicherung (Zero Data Retention)** aktiviert. Dann setzt die Anfrage `provider.data_collection = "deny"` und `provider.zdr = true`. Ein kostenloses Modell kann dadurch mit HTTP 404 abgelehnt werden. Wenn du die Option vor der Messung bewusst deaktivierst, setzt die Vorschau `zdr = false`. `data_collection = "deny"` bleibt in beiden Modi aktiv. Prüfe die Anbieterbedingungen und die Datenschutzvorgaben in deinem OpenRouter-Konto, die strengere Vorgaben erzwingen können.
+Flint benötigt Budget für interne Verarbeitung und sichtbare Antwort. Die Anfrage erlaubt insgesamt 8192 Tokens und bis zu 120 Sekunden Bearbeitungszeit. Nach einem Anbieterfehler kann dieselbe Vorschau erneut gesendet werden. Nach Erfolg ist sie verbraucht. Änderungen an Frage, Modell oder Datenschutz erfordern einen neuen Check.
 
-Am 10.11.2026 lieferte `recursive/flint-v1.0:free` im Verbindungstest mit fiktiven Daten, deaktiviertem ZDR, `data_collection = "deny"` und Preisgrenze 0 eine deutsche Textantwort. OpenRouter meldete Kosten von 0. Verfügbarkeit und Nutzungslimits können sich ändern.
+## Daten und Sicherheit
 
-In beiden Modi gelten Preisobergrenzen von 0 für Eingabe, Ausgabe und Anfrage sowie eine Grenze von 8192 Tokens für interne Verarbeitung und sichtbare Antwort. Kostenlose Modelle können Nutzungslimits erreichen (HTTP 429). CloudHub wechselt bei Fehlern nicht automatisch zu einem anderen Modell. [OpenRouter-Dokumentation](https://openrouter.ai/docs/guides/routing/provider-selection)
+- Messwerte, Prozessdaten und Analysevorschauen liegen im Arbeitsspeicher. Es gibt keine Datenbank oder automatischen Diagnoseexporte.
+- Der Verlauf umfasst bis zu zwei Minuten und maximal 120 Messpunkte. Checks verfallen nach zehn Minuten.
+- Lokale Schlüsseldateien, Logs und Exportordner werden von Git ausgeschlossen. Der Docker-Build erhält ausschließlich die freigegebenen Quelldateien.
+- Persönliche Exporte gehören nach `local/`, `metrics/`, `measurements/` oder `exports/`. Persönliche Bildschirmfotos gehören nach `screenshots/`.
+- Die API enthält keine Benutzeranmeldung. Die dokumentierten Startbefehle binden sie an die Loopback-Adresse. Vor einer Bereitstellung über das Internet sind Authentifizierung und weitere Zugriffskontrollen erforderlich.
 
-Flint verlangt interne Verarbeitung (Reasoning). Das ursprüngliche Gesamtlimit von 1200 Tokens führte beim vollständigen Diagnoseprompt zu einer leeren Antwort mit `finish_reason = "length"`. Das Backend erlaubt daher 8192 Tokens und bis zu 120 Sekunden Bearbeitungszeit. Das Dashboard wartet entsprechend länger. Falls das Limit trotzdem erreicht wird, erklärt die Oberfläche den Grund oder kennzeichnet eine unvollständige Antwort.
+Vor einem Commit lassen sich die vorgemerkten Inhalte und Ausschlussregeln prüfen.
 
-Checks und Vorschauen liegen vorübergehend im Arbeitsspeicher und verfallen nach zehn Minuten. Die Anwendung bietet manuelle Hinweise und Vergleichsmessungen.
+```powershell
+git diff --cached
+git check-ignore -v -- src/CloudHub.Api/appsettings.Local.json metrics/latest.json screenshots/dashboard.png
+```
 
-### KI-Ablauf testen
+Git-Ausschlussregeln prüfen Dateipfade. Bereits versionierte Dateien und sensible Inhalte in Quellcode benötigen eine gesonderte Prüfung.
 
-Führe `dotnet run --project .\tests\CloudHub.Checks.Smoke` aus. Der Integrationstest startet einen lokalen Testserver mit simulierter Uhr und simuliertem OpenRouter. Er prüft Messfenster, Datenlücken, Anonymisierung, Übereinstimmung zwischen Vorschau und Anfrage, Einmalversand, fehlenden Schlüssel und Ablauf. Er benötigt keinen echten Schlüssel und sendet keine Anfrage an OpenRouter.
+## Tests
 
-## Den Code verstehen
+```powershell
+dotnet build --configuration Release
+dotnet run --project .\tests\CloudHub.Checks.Smoke --configuration Release
+```
 
-| Datei | Aufgabe |
-| --- | --- |
-| `CloudHub.AI.Monitor.slnx` | Bündelt die .NET-Projekte. Dadurch kannst du im Hauptordner mit einem Befehl bauen. |
-| `src/CloudHub.Api/CloudHub.Api.csproj` | Wählt das Web-SDK und .NET 10 als Zielplattform. |
-| `src/CloudHub.Agent/WindowsMetrics.cs` | Liest Windows-Zähler und berechnet die drei Prozentwerte. |
-| `src/CloudHub.Agent/ProcessSnapshot.cs` | Erfasst erreichbare Prozesse zweimal und berechnet deren CPU-Verbrauch im Messintervall. |
-| `src/CloudHub.Api/PcChecks.cs` | Erstellt die Zusammenfassung, friert die Vorschau ein und sendet sie auf Anforderung an OpenRouter. |
-| `src/CloudHub.Api/MonitoringModels.cs` | Definiert die Datenformen für Messungen, Prozesse und Warnungen. |
-| `src/CloudHub.Agent/Program.cs` | Steuert Messintervall und HTTP-Versand. Mit `--once` lässt sich ein Durchlauf isoliert testen. |
-| `src/CloudHub.Api/Program.cs` | Liest den JSON-Anfragekörper in einen `SystemMeasurement` ein und prüft die Prozentwerte. Der POST-Handler ersetzt bei Erfolg die letzte Messung. Der GET-Handler liest sie wieder aus. |
-| `src/CloudHub.Api/wwwroot/` | Enthält die HTML-Startseite, das Stylesheet und das JavaScript. Der Browser ruft `GET /api/dashboard` ab und zeichnet die Werte und die vom Backend ermittelten Warnungen. |
-| `Dockerfile` | Baut die API in einem SDK-Image und kopiert das veröffentlichte Programm in ein kleineres ASP.NET-Laufzeitimage. |
+Der Integrationstest verwendet eine simulierte Uhr und einen simulierten OpenRouter-Handler. Er prüft Messfenster, Datenlücken, Anonymisierung, Datenvorschau, kostenlose Preisgrenzen, Datenschutzwahl, Wiederholung nach Fehlern, Tokenlimit und abgelaufene Checks. Ein echter Schlüssel oder eine externe Anfrage wird dafür nicht benötigt.
 
-Das Fragezeichen in `decimal?` lässt die API einen fehlenden Wert von einer gültigen Messung von 0 Prozent unterscheiden. Ein `lock` schützt die gemeinsame Messwertliste, wenn Agent und Dashboard gleichzeitig darauf zugreifen.
+## Docker
 
-## Mit Docker ausprobieren
+Das Dockerfile baut die API in einem SDK-Image und übernimmt die veröffentlichten Dateien in ein ASP.NET-Laufzeitimage. Der Container läuft mit dem vorgesehenen Nicht-Root-Benutzer.
 
-Voraussetzung ist eine laufende Docker Engine für Linux-Container. Führe im Projektordner beide Befehle aus.
+Zuerst die lokal gestartete API auf Port 5081 beenden. Anschließend mit laufender Docker Engine für Linux-Container ausführen.
 
 ```powershell
 docker build -t cloudhub-api:local .
 docker run --rm --name cloudhub-api -p 127.0.0.1:5081:8080 cloudhub-api:local
 ```
 
-Prüfe in einem zweiten Terminal mit `curl.exe -i http://127.0.0.1:5081/health` dieselbe Antwort. Docker leitet Port 5081 auf deinem Laptop an Port 8080 im Container weiter. Mit `docker stop cloudhub-api` beendest du den Container.
+Der Windows-Agent kann weiterhin über `.\scripts\Start-Agent.ps1 -Port 5081` senden. Für optionale KI-Aufrufe kann der Container den Schlüssel zur Laufzeit als Umgebungsvariable erhalten. Ein bereits im Terminal gesetztes `OPENROUTER_API_KEY` wird mit `--env OPENROUTER_API_KEY` weitergegeben.
 
-Der Agent läuft auch bei dieser Variante direkt auf Windows. Um Messwerte an die API auf Port 5081 zu senden, setze in seinem Terminal vor dem Start `$env:CLOUDHUB_API_PORT = '5081'`. In einem neuen Terminal gilt standardmäßig wieder Port 5080.
+**Stand der Prüfung** — .NET-Build, Windows-Messung, lokale API, Dashboard und KI-Ablauf wurden getestet. Der Docker-Start wurde in der bisherigen Entwicklungsumgebung mangels Docker Engine noch nicht ausgeführt.
 
-## Git und private Daten
+## Grenzen und nächste Schritte
 
-Die Anwendung hält echte Messwerte im Arbeitsspeicher. Speichere spätere lokale Exporte unter `local/`, `metrics/`, `measurements/` oder `exports/` und persönliche Bildschirmfotos unter `screenshots/`. Diese Ordner werden durch `.gitignore` ausgeschlossen. Auch Dateien wie `laptop.metrics.json` werden anhand ihres Namens ignoriert. Prüfe die Regeln mit `git check-ignore -v -- local/diagnose.json metrics/latest.json screenshots/dashboard.png laptop.metrics.json .env logs/agent.log`. Für jeden Beispielpfad sollte die passende Regel erscheinen.
+CPU-Werte beruhen auf einem Messfenster und können von der Task-Manager-Anzeige abweichen. Prozess-RAM bezeichnet das Working Set. Gemeinsam genutzte Speicherseiten können in mehreren Prozessen enthalten sein. Geschützte oder beendete Prozesse können in der Übersicht fehlen.
 
-Git prüft bei diesen Regeln Pfade und Dateinamen. Für Inhalte in einer bereits versionierten Datei gilt weiterhin die Prüfung mit `git diff --cached`. Ein Push überträgt die Commits einschließlich ihrer Historie. Bereits eingecheckte private Daten müssen deshalb gesondert aus der Historie entfernt werden.
+Die Anwendung ist ein lokaler MVP. Nach einem Backend-Neustart beginnt die Messhistorie erneut. Eine KI-Antwort liefert mögliche Erklärungen; Anpassungen am Rechner werden manuell durchgeführt.
 
-Prüfe vor jedem Commit die tatsächlich vorgemerkten Inhalte mit `git diff --cached`. Auch eine versionierte C#-Datei oder README kann versehentlich einen Schlüssel enthalten. Für einen späteren OpenRouter-Schlüssel ist eine lokale Umgebungsvariable vorgesehen. Der Docker-Build erhält über `.dockerignore` ausschließlich die freigegebenen Projekt- und Quellcodedateien.
-
-## Nächste Lernschritte
-
-1. Den Container lokal mit Docker testen.
-2. Den Container in einem lokalen Kubernetes-Cluster bereitstellen und den Build mit GitHub Actions automatisieren.
+Als nächste Schritte sind ein vollständiger Docker-Funktionstest, persistente Messhistorie, GitHub Actions und eine lokale Kubernetes-Bereitstellung vorgesehen.
