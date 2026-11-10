@@ -59,12 +59,12 @@ try
         new SystemMeasurement(20, 50, 60))).ToArray();
     clock.Advance(61);
     var standardResponse = await client.PostAsJsonAsync($"/api/checks/{standard}/preview",
-        new { question = "Testfrage", model = "nvidia/nemotron-3.5-super-vl:free", strictPrivacy = false });
+        new { question = "Testfrage", model = "recursive/flint-v1.0:free", strictPrivacy = false });
     await Expect(standardResponse, HttpStatusCode.OK);
     using var standardPreview = JsonDocument.Parse(await standardResponse.Content.ReadAsStringAsync());
     var standardProvider = standardPreview.RootElement.GetProperty("body").GetProperty("provider");
     if (standardProvider.GetProperty("zdr").GetBoolean() ||
-        standardProvider.GetProperty("data_collection").GetString() != "allow" ||
+        standardProvider.GetProperty("data_collection").GetString() != "deny" ||
         standardProvider.GetProperty("max_price").GetProperty("completion").GetInt32() != 0)
         throw new Exception("Explizite Datenschutzwahl oder Preisgrenze falsch.");
 

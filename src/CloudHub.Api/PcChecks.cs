@@ -6,7 +6,7 @@ using System.Text.RegularExpressions;
 internal static class PcChecks
 {
     private static readonly string[] FreeModels =
-        ["xingchen-agi/xing4.0-29b-a4b:free", "nvidia/nemotron-3.5-super-vl:free"];
+        ["recursive/flint-v1.0:free", "xingchen-agi/xing4.0-29b-a4b:free", "nvidia/nemotron-3.5-super-vl:free"];
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { WriteIndented = true };
     private const string Instructions = """
         Du bist ein vorsichtiger Windows-Diagnoseassistent. Antworte auf Deutsch.
@@ -90,7 +90,7 @@ internal static class PcChecks
                 {
                     model = input.Model,
                     max_tokens = 1200,
-                    provider = new { data_collection = input.StrictPrivacy ? "deny" : "allow", zdr = input.StrictPrivacy, max_price = new { prompt = 0, completion = 0, request = 0, image = 0 } },
+                    provider = new { data_collection = "deny", zdr = input.StrictPrivacy, max_price = new { prompt = 0, completion = 0, request = 0, image = 0 } },
                     messages = new[] {
                         new { role = "system", content = Instructions },
                         new { role = "user", content = JsonSerializer.Serialize(report, Json) }

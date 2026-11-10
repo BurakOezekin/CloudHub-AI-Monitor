@@ -59,12 +59,13 @@
         <textarea id="question" maxlength="2000" rows="3" placeholder="Beim Programmieren mit Browser und Docker ruckelt mein Laptop. Welche Schritte kann ich prüfen?"></textarea>
         <label for="model">Kostenloses Modell</label>
         <select id="model">
+          <option value="recursive/flint-v1.0:free">Recursive Flint · kostenlos</option>
           <option value="xingchen-agi/xing4.0-29b-a4b:free">Xing4.0 29B A4B · kostenlos</option>
           <option value="nvidia/nemotron-3.5-super-vl:free">Nemotron 3.5 Super VL · kostenlos</option>
         </select>
         <p class="help">Kostenlose Modelle haben Nutzungslimits und können ausgelastet sein. Dein Fragetext wird mitgesendet.</p>
         <label class="consent"><input id="strict-privacy" type="checkbox" checked>Streng: nur Anbieter ohne Datenspeicherung (Zero Data Retention)</label>
-        <p class="help">Diese Einschränkung kann kostenlose Modelle blockieren. Wenn du sie deaktivierst, gelten die Anbieterbedingungen: Speicherung und Nutzung der übermittelten Frage und Diagnosedaten zu Trainingszwecken können erlaubt sein. Prüfe die Vorschau und die Datenschutzeinstellungen deines OpenRouter-Kontos.</p>
+        <p class="help">ZDR kann kostenlose Modelle blockieren. Flint hat im Verbindungstest ohne ZDR geantwortet. Auch ohne ZDR fordern wir über OpenRouter Anbieter mit der Datenrichtlinie „keine Datensammlung“ an. Prüfe die Vorschau, die Anbieterbedingungen und die Datenschutzeinstellungen deines OpenRouter-Kontos.</p>
       </fieldset>
       <div class="actions"><button id="start-check" type="button">60-Sekunden-PC-Check starten</button><button id="cancel-check" class="secondary" type="button" hidden>Abbrechen</button></div>
       <p id="check-status" class="help" role="status"></p>

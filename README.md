@@ -69,7 +69,7 @@ Beim nächsten Abruf zeigt das Dashboard „Arbeitsspeicher erhöht“. Wiederho
 Die Prozessliste zeigt die jeweils fünf größten Verbraucher nach CPU und RAM. CPU-Prozentwerte beziehen sich auf die gesamte CPU-Kapazität. RAM wird als Working Set gemessen. Gemeinsam genutzte Speicherseiten können in mehreren Prozessen enthalten sein. Die Liste ist deshalb keine Aufteilung des gesamten RAM. Geschützte oder inzwischen beendete Prozesse können fehlen. In einer eingeschränkten Ausführungsumgebung ist nur eine Teilmenge der Prozesse sichtbar.
 
 1. Beschreibe dein Problem im Fragefeld.
-2. Wähle eines der kostenlosen Modelle. Zur Auswahl stehen Xing4.0 29B A4B und Nemotron 3.5 Super VL mit der jeweiligen `:free`-Modell-ID. Kostenpflichtige Modelle werden im Backend abgewiesen.
+2. Wähle eines der kostenlosen Modelle. Vorausgewählt ist Recursive Flint. Alternativ stehen Xing4.0 29B A4B und Nemotron 3.5 Super VL zur Auswahl. Alle verwenden ihre `:free`-Modell-ID. Kostenpflichtige Modelle werden im Backend abgewiesen.
 3. Starte den 60-Sekunden-PC-Check. Der Agent muss währenddessen laufen.
 4. Prüfe die eingefrorene Vorschau. Die Anfrage enthält die Frage, Durchschnitts- und Spitzenwerte, die Anzahl von Stichproben über Warnschwellen sowie Prozess-Aliase mit Spitzenwerten. Die Zuordnung mit Namen und PIDs bleibt lokal.
 5. Bestätige die Vorschau und klicke auf **Mit OpenRouter analysieren**. Nach einem Verbindungs- oder Anbieterfehler kannst du die gleiche Vorschau innerhalb ihrer Gültigkeit erneut senden. Nach Erfolg ist sie verbraucht. Gleichzeitige Anfragen mit derselben Vorschau sind gesperrt.
@@ -85,7 +85,9 @@ Alternativ unterstützt das Backend die Umgebungsvariablen `OPENROUTER_API_KEY` 
 
 Das Dashboard meldet nur, ob ein Schlüssel vorhanden ist. Die Gültigkeit wird erst beim Modellaufruf sichtbar. Deine eigene Frage wird vollständig mitgesendet. Entferne vor der Vorschau private Angaben aus deinem Text.
 
-Standardmäßig ist **Streng: nur Anbieter ohne Datenspeicherung (Zero Data Retention)** aktiviert. Dann setzt die Anfrage `provider.data_collection = "deny"` und `provider.zdr = true`. Ein kostenloses Modell kann dadurch mit HTTP 404 abgelehnt werden. Wenn du die Option vor der Messung bewusst deaktivierst, setzt die Vorschau `data_collection = "allow"` und `zdr = false`. Die Anbieterbedingungen können dann Speicherung und Nutzung der gesendeten Frage und Diagnosedaten zu Trainingszwecken erlauben. Prüfe zusätzlich die Datenschutzvorgaben in deinem OpenRouter-Konto, die strengere Vorgaben erzwingen können.
+Standardmäßig ist **Streng: nur Anbieter ohne Datenspeicherung (Zero Data Retention)** aktiviert. Dann setzt die Anfrage `provider.data_collection = "deny"` und `provider.zdr = true`. Ein kostenloses Modell kann dadurch mit HTTP 404 abgelehnt werden. Wenn du die Option vor der Messung bewusst deaktivierst, setzt die Vorschau `zdr = false`. `data_collection = "deny"` bleibt in beiden Modi aktiv. Prüfe die Anbieterbedingungen und die Datenschutzvorgaben in deinem OpenRouter-Konto, die strengere Vorgaben erzwingen können.
+
+Am 10.11.2026 lieferte `recursive/flint-v1.0:free` im Verbindungstest mit fiktiven Daten, deaktiviertem ZDR, `data_collection = "deny"` und Preisgrenze 0 eine deutsche Textantwort. OpenRouter meldete Kosten von 0. Verfügbarkeit und Nutzungslimits können sich ändern.
 
 In beiden Modi gelten Preisobergrenzen von 0 für Eingabe, Ausgabe und Anfrage sowie eine Antwortgrenze von 1200 Tokens. Kostenlose Modelle können Nutzungslimits erreichen (HTTP 429). CloudHub wechselt bei Fehlern nicht automatisch zu einem anderen Modell. [OpenRouter-Dokumentation](https://openrouter.ai/docs/guides/routing/provider-selection)
 
