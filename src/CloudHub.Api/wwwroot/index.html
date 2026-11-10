@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#142536">
+  <title>Systemübersicht · CloudHub AI Monitor</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/dashboard.css">
+  <script src="/dashboard.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="shell bar-inner">
+      <div class="brand"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>CloudHub <span class="brand-product">AI Monitor</span></div>
+      <a class="api-link" href="/api/metrics/latest">JSON-API <span aria-hidden="true">↗</span></a>
+    </div>
+  </header>
+  <main class="shell">
+    <header class="page-head">
+      <div><h1>Systemübersicht</h1><p id="last-update">Messwerte werden abgerufen …</p></div>
+      <span class="status" id="status" role="status">Verbinden</span>
+    </header>
+    <section class="metrics" aria-label="Aktuelle Auslastung" id="metrics"></section>
+    <div class="detail-grid">
+      <section class="panel trend" aria-labelledby="trend-heading">
+        <div class="panel-title">
+          <h2 id="trend-heading">Auslastungsverlauf</h2>
+          <label class="window-picker"><span class="sr-only">Angezeigter Zeitraum</span>
+            <select id="window"><option value="120">2 Minuten</option><option value="30">30 Sekunden</option></select>
+          </label>
+        </div>
+        <div class="legend"><span class="cpu">CPU</span><span class="ram">RAM</span><span class="disk">Speicherplatz</span></div>
+        <div class="plot"><canvas id="chart" role="img" aria-label="Zeitverlauf der Auslastung in Prozent"></canvas>
+          <span id="plot-empty">Noch keine Messpunkte</span>
+        </div>
+      </section>
+      <section class="panel alerts" aria-labelledby="alert-heading">
+        <div class="panel-title"><h2 id="alert-heading">Warnungen</h2><span id="count" class="count">–</span></div>
+        <div id="warnings" aria-live="polite">Warte auf die erste Messung.</div>
+      </section>
+    </div>
+    <footer><span class="foot-dot" aria-hidden="true"></span>Lokaler Windows-Agent <span class="separator">/</span> Aktualisierung alle 5 Sekunden</footer>
+    <noscript>Bitte aktiviere JavaScript, um das Dashboard zu laden.</noscript>
+  </main>
+</body>
+</html>

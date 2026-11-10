@@ -1,6 +1,6 @@
 # CloudHub AI Monitor
 
-Ein Lernprojekt für Windows-Monitoring und Cloud-Betrieb mit C# und ASP.NET Core. Ein C#-Agent misst die Auslastung des Windows-Laptops und sendet drei Prozentwerte per HTTP an die lokale API. Die API hält die letzte Messung im Arbeitsspeicher bereit.
+Ein Lernprojekt für Windows-Monitoring und Cloud-Betrieb mit C# und ASP.NET Core. Ein C#-Agent sendet drei Prozentwerte an eine lokale API. Im Web-Dashboard siehst du aktuelle Messwerte, ihren Verlauf und Warnungen.
 
 ## Lokal ausprobieren
 
@@ -17,7 +17,7 @@ Lass dieses Terminal geöffnet. Rufe den Endpunkt in einem zweiten Terminal auf.
 curl.exe -i http://127.0.0.1:5080/health
 ```
 
-Erwartet werden der HTTP-Status `200 OK`, der Inhaltstyp `application/json` und der Antworttext `{"status":"ok"}`. Lass die API für den nächsten Versuch laufen. Mit `Strg+C` im ersten Terminal beendest du sie.
+Erwartet werden der HTTP-Status `200 OK`, der Inhaltstyp `application/json` und der Antworttext `{"status":"ok"}`. Öffne anschließend [das Dashboard](http://127.0.0.1:5080/) im Browser. Die Startseite zeigt zunächst „Warte auf Agent“. Sobald du Daten sendest, aktualisiert sie sich alle fünf Sekunden. Mit `Strg+C` im ersten Terminal beendest du die API.
 
 ## Einen CPU-Messwert senden und wieder lesen
 
@@ -50,7 +50,17 @@ Ohne `-- --once` misst der Agent fortlaufend etwa alle fünf Sekunden. Mit `Strg
 | `ramPercent` | Aktuell belegter Anteil des physischen RAM | Windows liefert den ungefähren Prozentwert über `GlobalMemoryStatusEx`. |
 | `diskUsedPercent` | Belegter Speicherplatz auf dem Windows-Systemlaufwerk | Vergleiche Gesamtkapazität und freien Platz im Explorer unter **Dieser PC**. |
 
-Der HTTP-Anfragekörper besteht aus diesen drei Zahlen. Der Agent benutzt die feste Loopback-Adresse `127.0.0.1`. Die API hält die Messung bis zur nächsten gültigen Einsendung oder bis zum Neustart. Echte Messwerte erscheinen nur in der lokalen Antwort und im Agenten-Terminal.
+Der HTTP-Anfragekörper besteht aus diesen drei Zahlen. Der Agent benutzt die feste Loopback-Adresse `127.0.0.1`. Die API ergänzt die Empfangszeit. Der Verlauf zeigt bis zu zwei Minuten und umfasst maximal 120 Messpunkte. Die letzte gültige Messung bleibt bis zum Neustart abrufbar. Die Daten liegen im Arbeitsspeicher.
+
+## Warnung im Dashboard testen
+
+Pausiere für diesen Versuch den Agenten mit `Strg+C` in seinem Terminal, damit er den Testwert nicht gleich überschreibt. Sende in PowerShell eine fiktive Messung.
+
+```powershell
+Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:5080/api/metrics' -ContentType 'application/json' -Body '{"cpuPercent":20,"ramPercent":85,"diskUsedPercent":50}'
+```
+
+Beim nächsten Abruf zeigt das Dashboard „Arbeitsspeicher erhöht“. Wiederhole den Aufruf mit `84.9` für RAM, um die Warnung aufzuheben. Die Startwerte für die Regeln sind CPU ≥ 90 %, RAM ≥ 85 % und belegter Speicherplatz ≥ 90 %. Nach 15 Sekunden ohne neue Messung kennzeichnet die Oberfläche den letzten Stand als veraltet.
 
 ## Den Code verstehen
 
@@ -61,9 +71,10 @@ Der HTTP-Anfragekörper besteht aus diesen drei Zahlen. Der Agent benutzt die fe
 | `src/CloudHub.Agent/WindowsMetrics.cs` | Liest Windows-Zähler und berechnet die drei Prozentwerte. |
 | `src/CloudHub.Agent/Program.cs` | Steuert Messintervall und HTTP-Versand. Mit `--once` lässt sich ein Durchlauf isoliert testen. |
 | `src/CloudHub.Api/Program.cs` | Liest den JSON-Anfragekörper in einen `SystemMeasurement` ein und prüft die Prozentwerte. Der POST-Handler ersetzt bei Erfolg die letzte Messung. Der GET-Handler liest sie wieder aus. |
+| `src/CloudHub.Api/wwwroot/` | Enthält die HTML-Startseite, das Stylesheet und das JavaScript. Der Browser ruft `GET /api/dashboard` ab und zeichnet die Werte und die vom Backend ermittelten Warnungen. |
 | `Dockerfile` | Baut die API in einem SDK-Image und kopiert das veröffentlichte Programm in ein kleineres ASP.NET-Laufzeitimage. |
 
-Das Fragezeichen in `decimal?` lässt die API einen fehlenden Wert von einer gültigen Messung von 0 Prozent unterscheiden. `Volatile.Write` und `Volatile.Read` machen die aktuelle Referenz auch für Anfragen auf anderen Threads sichtbar.
+Das Fragezeichen in `decimal?` lässt die API einen fehlenden Wert von einer gültigen Messung von 0 Prozent unterscheiden. Ein `lock` schützt die gemeinsame Messwertliste, wenn Agent und Dashboard gleichzeitig darauf zugreifen.
 
 ## Mit Docker ausprobieren
 
@@ -86,6 +97,5 @@ Prüfe vor jedem Commit die tatsächlich vorgemerkten Inhalte mit `git diff --ca
 
 ## Nächste Lernschritte
 
-1. Ein Dashboard bauen, das die drei Werte bei jedem Abruf aktualisiert. Warnregeln mit fiktiven Werten knapp unter und über ihren Schwellen testen.
-2. Die optionale Analyse ergänzen. Eine Vorschau im Dashboard zeigt die freigegebenen Prozentwerte und ausgelösten Regelkennungen. Erst der Klick auf **Mit OpenRouter analysieren** soll diese Angaben über das Backend an OpenRouter senden. Der API-Schlüssel wird als lokale Umgebungsvariable des Backends gesetzt.
-3. Den Container in einem lokalen Kubernetes-Cluster bereitstellen und den Build mit GitHub Actions automatisieren.
+1. Die optionale Analyse ergänzen. Eine Vorschau im Dashboard zeigt die freigegebenen Prozentwerte und ausgelösten Regelkennungen. Erst der Klick auf **Mit OpenRouter analysieren** soll diese Angaben über das Backend an OpenRouter senden. Der API-Schlüssel wird als lokale Umgebungsvariable des Backends gesetzt.
+2. Den Container in einem lokalen Kubernetes-Cluster bereitstellen und den Build mit GitHub Actions automatisieren.
