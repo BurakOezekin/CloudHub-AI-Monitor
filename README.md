@@ -72,7 +72,7 @@ Die Prozessliste zeigt die jeweils fünf größten Verbraucher nach CPU und RAM.
 2. Wähle eines der kostenlosen Modelle. Zur Auswahl stehen Xing4.0 29B A4B und Nemotron 3.5 Super VL mit der jeweiligen `:free`-Modell-ID. Kostenpflichtige Modelle werden im Backend abgewiesen.
 3. Starte den 60-Sekunden-PC-Check. Der Agent muss währenddessen laufen.
 4. Prüfe die eingefrorene Vorschau. Die Anfrage enthält die Frage, Durchschnitts- und Spitzenwerte, die Anzahl von Stichproben über Warnschwellen sowie Prozess-Aliase mit Spitzenwerten. Die Zuordnung mit Namen und PIDs bleibt lokal.
-5. Bestätige die Vorschau und klicke auf **Mit OpenRouter analysieren**. Der Klick erlaubt einen Sendeversuch. Für einen weiteren Versuch ist ein neuer Check erforderlich.
+5. Bestätige die Vorschau und klicke auf **Mit OpenRouter analysieren**. Nach einem Verbindungs- oder Anbieterfehler kannst du die gleiche Vorschau innerhalb ihrer Gültigkeit erneut senden. Nach Erfolg ist sie verbraucht. Gleichzeitige Anfragen mit derselben Vorschau sind gesperrt.
 6. Prüfe die Antwort und setze eine passende Änderung selbst um. Starte unter vergleichbarer Last erneut einen Check. Das Dashboard vergleicht Durchschnittswerte mit dem vorigen Check auf dieser Seite. Neuladen löscht den Vergleich.
 
 Eine Rückfrage stellst du durch Anpassen des Fragefelds und einen neuen Check. Die API sendet die neue Frage und die aktuelle Zusammenfassung. Die Antwort wird als Text dargestellt.
@@ -85,7 +85,9 @@ Alternativ unterstützt das Backend die Umgebungsvariablen `OPENROUTER_API_KEY` 
 
 Das Dashboard meldet nur, ob ein Schlüssel vorhanden ist. Die Gültigkeit wird erst beim Modellaufruf sichtbar. Deine eigene Frage wird vollständig mitgesendet. Entferne vor der Vorschau private Angaben aus deinem Text.
 
-Der Request setzt `provider.data_collection = "deny"`, `provider.zdr = true`, Preisobergrenzen von 0 für Eingabe, Ausgabe und Anfrage sowie eine Antwortgrenze von 1200 Tokens. Die Anfrage geht über OpenRouter an einen Modellanbieter. Kostenlose Modelle unterliegen Nutzungslimits. Die Datenschutzfilter können die Modellverfügbarkeit einschränken. CloudHub wechselt bei einem Fehler nicht automatisch zu einem kostenpflichtigen Modell. [OpenRouter-Dokumentation](https://openrouter.ai/docs/guides/routing/provider-selection)
+Standardmäßig ist **Streng: nur Anbieter ohne Datenspeicherung (Zero Data Retention)** aktiviert. Dann setzt die Anfrage `provider.data_collection = "deny"` und `provider.zdr = true`. Ein kostenloses Modell kann dadurch mit HTTP 404 abgelehnt werden. Wenn du die Option vor der Messung bewusst deaktivierst, setzt die Vorschau `data_collection = "allow"` und `zdr = false`. Die Anbieterbedingungen können dann Speicherung und Nutzung der gesendeten Frage und Diagnosedaten zu Trainingszwecken erlauben. Prüfe zusätzlich die Datenschutzvorgaben in deinem OpenRouter-Konto, die strengere Vorgaben erzwingen können.
+
+In beiden Modi gelten Preisobergrenzen von 0 für Eingabe, Ausgabe und Anfrage sowie eine Antwortgrenze von 1200 Tokens. Kostenlose Modelle können Nutzungslimits erreichen (HTTP 429). CloudHub wechselt bei Fehlern nicht automatisch zu einem anderen Modell. [OpenRouter-Dokumentation](https://openrouter.ai/docs/guides/routing/provider-selection)
 
 Checks und Vorschauen liegen vorübergehend im Arbeitsspeicher und verfallen nach zehn Minuten. Die Anwendung bietet manuelle Hinweise und Vergleichsmessungen.
 

@@ -40,16 +40,37 @@ try
         throw new Exception("Lokale Alias-Zuordnung fehlt.");
     if (!expectedBody.Contains("Testfrage") || !expectedBody.Contains("Prozess 1"))
         throw new Exception("Frage oder Alias fehlt.");
+    var provider = preview.RootElement.GetProperty("body").GetProperty("provider");
+    if (!provider.GetProperty("zdr").GetBoolean() || provider.GetProperty("data_collection").GetString() != "deny")
+        throw new Exception("Standard-Datenschutz fehlt.");
+    handler.Status = HttpStatusCode.TooManyRequests;
+    await Expect(await client.PostAsJsonAsync($"/api/checks/{check}/analyze", new { }), HttpStatusCode.BadGateway);
+    handler.Status = HttpStatusCode.OK;
     await Expect(await client.PostAsJsonAsync($"/api/checks/{check}/analyze", new { }), HttpStatusCode.OK);
-    if (handler.Calls != 1 || !System.Text.Json.Nodes.JsonNode.DeepEquals(
+    if (handler.Calls != 2 || !System.Text.Json.Nodes.JsonNode.DeepEquals(
         System.Text.Json.Nodes.JsonNode.Parse(handler.Body!), System.Text.Json.Nodes.JsonNode.Parse(expectedBody)))
         throw new Exception("Gesendeter Inhalt weicht von der Vorschau ab.");
     await Expect(await client.PostAsJsonAsync($"/api/checks/{check}/analyze", new { }), HttpStatusCode.Conflict);
-    if (handler.Calls != 1) throw new Exception("Doppelter Modellaufruf.");
+    if (handler.Calls != 2) throw new Exception("Doppelter Modellaufruf nach Erfolg.");
+
+    var standard = await Start();
+    started = clock.GetUtcNow();
+    samples = Enumerable.Range(0, 12).Select(index => new Sample(started.AddSeconds(1 + index * 5),
+        new SystemMeasurement(20, 50, 60))).ToArray();
+    clock.Advance(61);
+    var standardResponse = await client.PostAsJsonAsync($"/api/checks/{standard}/preview",
+        new { question = "Testfrage", model = "nvidia/nemotron-3.5-super-vl:free", strictPrivacy = false });
+    await Expect(standardResponse, HttpStatusCode.OK);
+    using var standardPreview = JsonDocument.Parse(await standardResponse.Content.ReadAsStringAsync());
+    var standardProvider = standardPreview.RootElement.GetProperty("body").GetProperty("provider");
+    if (standardProvider.GetProperty("zdr").GetBoolean() ||
+        standardProvider.GetProperty("data_collection").GetString() != "allow" ||
+        standardProvider.GetProperty("max_price").GetProperty("completion").GetInt32() != 0)
+        throw new Exception("Explizite Datenschutzwahl oder Preisgrenze falsch.");
 
     builder.Configuration["OpenRouter:ApiKey"] = "";
     await Expect(await client.PostAsJsonAsync($"/api/checks/{Guid.NewGuid()}/analyze", new { }), HttpStatusCode.ServiceUnavailable);
-    if (handler.Calls != 1) throw new Exception("Aufruf ohne Key.");
+    if (handler.Calls != 2) throw new Exception("Aufruf ohne Key.");
     var expired = await Start();
     clock.Advance(601);
     await Expect(await Preview(expired), HttpStatusCode.NotFound);
@@ -80,6 +101,7 @@ sealed class FakeRouter : HttpMessageHandler
 {
     internal int Calls;
     internal string? Body;
+    internal HttpStatusCode Status = HttpStatusCode.OK;
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         Calls++;
@@ -87,7 +109,7 @@ sealed class FakeRouter : HttpMessageHandler
             request.Headers.Authorization?.Parameter != "local-test-placeholder")
             throw new Exception("Falsches Ziel oder Authentifizierung.");
         Body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(cancellationToken)).RootElement.ToString();
-        return new HttpResponseMessage(HttpStatusCode.OK) {
+        return new HttpResponseMessage(Status) {
             Content = new StringContent("""{"choices":[{"message":{"content":"Simulierte Antwort."}}]}""", Encoding.UTF8, "application/json")
         };
     }

@@ -90,7 +90,7 @@ internal static class PcChecks
                 {
                     model = input.Model,
                     max_tokens = 1200,
-                    provider = new { data_collection = "deny", zdr = true, max_price = new { prompt = 0, completion = 0, request = 0, image = 0 } },
+                    provider = new { data_collection = input.StrictPrivacy ? "deny" : "allow", zdr = input.StrictPrivacy, max_price = new { prompt = 0, completion = 0, request = 0, image = 0 } },
                     messages = new[] {
                         new { role = "system", content = Instructions },
                         new { role = "user", content = JsonSerializer.Serialize(report, Json) }
@@ -115,9 +115,10 @@ internal static class PcChecks
             {
                 if (!checks.TryGetValue(id, out var check) || check.Body is null || check.Started < clock.GetUtcNow().AddMinutes(-10))
                     return Results.Conflict(new { message = "Bitte zuerst eine neue Datenvorschau erstellen." });
+                if (check.InFlight)
+                    return Results.Conflict(new { message = "Diese Analyse läuft bereits." });
                 body = check.Body;
-                // Eine geprüfte Vorschau erlaubt genau einen Sendeversuch, auch bei Doppelklicks.
-                checks.Remove(id);
+                check.InFlight = true;
             }
             try
             {
@@ -133,17 +134,23 @@ internal static class PcChecks
                         401 or 403 => "Der Schlüssel oder seine Berechtigung wurde abgelehnt.",
                         _ => "Das kostenlose Modell konnte die Anfrage nicht ausführen."
                     };
-                    return Results.Json(new { message = $"OpenRouter HTTP {(int)response.StatusCode}: {reason} Für einen neuen Versuch bitte später einen neuen Check starten oder das andere kostenlose Modell wählen." }, statusCode: 502);
+                    return Results.Json(new { message = $"OpenRouter HTTP {(int)response.StatusCode}: {reason} Du kannst dieselbe Vorschau später erneut senden. Für andere Modell- oder Datenschutzeinstellungen bitte einen neuen Check starten." }, statusCode: 502);
                 }
                 using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(context.RequestAborted), cancellationToken: context.RequestAborted);
                 var content = document.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString();
                 if (string.IsNullOrWhiteSpace(content))
                     return Results.Json(new { message = "Das Modell hat keine Textantwort geliefert." }, statusCode: 502);
+                lock (gate) checks.Remove(id);
                 return Results.Ok(new { answer = content });
             }
             catch (Exception error) when (error is HttpRequestException or OperationCanceledException or JsonException or KeyNotFoundException or InvalidOperationException or ArgumentOutOfRangeException)
             {
-                return Results.Json(new { message = "Analyse fehlgeschlagen oder Zeitlimit erreicht. Es wurde nur eine kostenlose Route angefragt. Bitte bei Bedarf einen neuen Check starten." }, statusCode: 502);
+                return Results.Json(new { message = "Analyse fehlgeschlagen oder Zeitlimit erreicht. Es wurde nur eine kostenlose Route angefragt. Du kannst die Vorschau später erneut senden." }, statusCode: 502);
+            }
+            finally
+            {
+                lock (gate)
+                    if (checks.TryGetValue(id, out var check)) check.InFlight = false;
             }
         });
     }
@@ -164,7 +171,8 @@ internal static class PcChecks
     {
         internal DateTimeOffset Started { get; } = started;
         internal string? Body { get; set; }
+        internal bool InFlight { get; set; }
     }
 }
 
-internal sealed record PreviewInput(string? Question, string? Model);
+internal sealed record PreviewInput(string? Question, string? Model, bool StrictPrivacy = true);
