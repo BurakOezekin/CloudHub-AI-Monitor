@@ -22,6 +22,11 @@
       <span class="status" id="status" role="status">Verbinden</span>
     </header>
     <section class="metrics" aria-label="Aktuelle Auslastung" id="metrics"></section>
+    <aside id="agent-help" class="panel process-panel" hidden>
+      <h2>Windows-Agent starten</h2>
+      <p class="help">Die API wartet auf Messwerte. Öffne PowerShell im CloudHub-Projektordner und starte diesen Befehl. Lass das Terminal geöffnet.</p>
+      <pre id="agent-command"></pre>
+    </aside>
     <div class="detail-grid">
       <section class="panel trend" aria-labelledby="trend-heading">
         <div class="panel-title">
@@ -47,14 +52,17 @@
     </section>
     <section class="panel check-panel" aria-labelledby="check-heading">
       <div class="panel-title"><h2 id="check-heading">PC-Assistent</h2><span class="count">OpenRouter</span></div>
-      <p class="help">Beschreibe dein Problem und miss eine Minute. Prüfe danach die Datenvorschau. Die Analyse wird durch deinen Klick an OpenRouter und einen Modellanbieter gesendet und kann Kosten verursachen.</p>
+      <p class="help">Beschreibe dein Problem und miss eine Minute. Prüfe danach die Datenvorschau. Dein Klick sendet sie über OpenRouter an das ausgewählte kostenlose Modell. Kostenpflichtige Modelle sind gesperrt.</p>
       <p id="key-status" class="help" role="status"></p>
       <fieldset id="check-inputs">
         <label for="question">Was möchtest du herausfinden?</label>
         <textarea id="question" maxlength="2000" rows="3" placeholder="Beim Programmieren mit Browser und Docker ruckelt mein Laptop. Welche Schritte kann ich prüfen?"></textarea>
-        <label for="model">OpenRouter-Modell-ID</label>
-        <input id="model" maxlength="120" autocomplete="off" value="openai/gpt-5-mini" placeholder="anbieter/modellname">
-        <p class="help">Die Modell-ID findest du auf der Modellseite bei OpenRouter. Dein Text wird mitgesendet. Entferne persönliche Angaben vor dem Start.</p>
+        <label for="model">Kostenloses Modell</label>
+        <select id="model">
+          <option value="xingchen-agi/xing4.0-29b-a4b:free">Xing4.0 29B A4B · kostenlos</option>
+          <option value="nvidia/nemotron-3.5-super-vl:free">Nemotron 3.5 Super VL · kostenlos</option>
+        </select>
+        <p class="help">Kostenlose Modelle haben Nutzungslimits und können ausgelastet sein. Die Datenschutzfilter bleiben aktiv. Dein Fragetext wird mitgesendet.</p>
       </fieldset>
       <div class="actions"><button id="start-check" type="button">60-Sekunden-PC-Check starten</button><button id="cancel-check" class="secondary" type="button" hidden>Abbrechen</button></div>
       <p id="check-status" class="help" role="status"></p>

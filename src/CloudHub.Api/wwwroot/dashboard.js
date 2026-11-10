@@ -30,6 +30,8 @@ function render() {
   const warnings = snapshot?.warnings ?? [];
   const age = latest ? serverTime() - Date.parse(latest.receivedAt) : Infinity;
   const state = !online ? "offline" : !latest ? "waiting" : age > 15000 ? "stale" : "live";
+  byId("agent-help").hidden = !online || state === "live";
+  byId("agent-command").textContent = ".\\scripts\\Start-Agent.ps1 -Port " + (location.port || (location.protocol === "https:" ? "443" : "80"));
   const status = byId("status");
   status.dataset.state = state;
   status.textContent = { live: "Messung aktuell", stale: "Messung veraltet", waiting: "Warte auf Agent", offline: "API nicht erreichbar" }[state];

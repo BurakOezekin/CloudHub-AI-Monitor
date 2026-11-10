@@ -18,6 +18,8 @@ using var client = new HttpClient(new HttpClientHandler { UseProxy = false }) { 
 try
 {
     var check = await Start();
+    await Expect(await client.PostAsJsonAsync($"/api/checks/{check}/preview",
+        new { question = "Testfrage", model = "openai/gpt-5-mini" }), HttpStatusCode.BadRequest);
     await Expect(await Preview(check), HttpStatusCode.Conflict);
     clock.Advance(61);
     await Expect(await Preview(check), HttpStatusCode.Conflict);
@@ -28,6 +30,10 @@ try
     await Expect(previewResponse, HttpStatusCode.OK);
     using var preview = JsonDocument.Parse(await previewResponse.Content.ReadAsStringAsync());
     string expectedBody = preview.RootElement.GetProperty("body").GetRawText();
+    var prices = preview.RootElement.GetProperty("body").GetProperty("provider").GetProperty("max_price");
+    if (prices.GetProperty("prompt").GetInt32() != 0 || prices.GetProperty("completion").GetInt32() != 0 ||
+        prices.GetProperty("request").GetInt32() != 0)
+        throw new Exception("Kostenlose Preisgrenze fehlt.");
     if (expectedBody.Contains("PRIVATE-PROCESS-XYZ") || expectedBody.Contains("987654"))
         throw new Exception("Private Prozessdaten sind in der KI-Vorschau.");
     if (!preview.RootElement.GetProperty("aliases").GetRawText().Contains("PRIVATE-PROCESS-XYZ"))
@@ -58,7 +64,7 @@ async Task<Guid> Start()
     using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
     return json.RootElement.GetProperty("id").GetGuid();
 }
-Task<HttpResponseMessage> Preview(Guid id) => client.PostAsJsonAsync($"/api/checks/{id}/preview", new { question = "Testfrage", model = "test/model" });
+Task<HttpResponseMessage> Preview(Guid id) => client.PostAsJsonAsync($"/api/checks/{id}/preview", new { question = "Testfrage", model = "xingchen-agi/xing4.0-29b-a4b:free" });
 static async Task Expect(HttpResponseMessage response, HttpStatusCode status)
 {
     if (response.StatusCode != status)

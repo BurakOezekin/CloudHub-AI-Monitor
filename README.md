@@ -35,6 +35,8 @@ Wiederhole den POST mit `73` und aktualisiere den Browser. Versuche anschließen
 
 ## Windows-Agent ausprobieren
 
+Bei einer bereits laufenden API auf Port 5081 startet `.\scripts\Start-Agent.ps1 -Port 5081` im Projektordner den Agenten mit der passenden Zieladresse. Lass dieses PowerShell-Fenster geöffnet. Für den folgenden Start auf Port 5080 kannst du entsprechend `-Port 5080` verwenden.
+
 Starte die API wie oben beschrieben und öffne ein zweites PowerShell-Terminal im Projektordner. Dieser Aufruf misst einmal und beendet den Agenten nach dem Senden.
 
 ```powershell
@@ -67,7 +69,7 @@ Beim nächsten Abruf zeigt das Dashboard „Arbeitsspeicher erhöht“. Wiederho
 Die Prozessliste zeigt die jeweils fünf größten Verbraucher nach CPU und RAM. CPU-Prozentwerte beziehen sich auf die gesamte CPU-Kapazität. RAM wird als Working Set gemessen. Gemeinsam genutzte Speicherseiten können in mehreren Prozessen enthalten sein. Die Liste ist deshalb keine Aufteilung des gesamten RAM. Geschützte oder inzwischen beendete Prozesse können fehlen. In einer eingeschränkten Ausführungsumgebung ist nur eine Teilmenge der Prozesse sichtbar.
 
 1. Beschreibe dein Problem im Fragefeld.
-2. Wähle die exakte OpenRouter-Modell-ID. Vorausgewählt ist `openai/gpt-5-mini`. Du kannst sie vor dem Start ändern.
+2. Wähle eines der kostenlosen Modelle. Zur Auswahl stehen Xing4.0 29B A4B und Nemotron 3.5 Super VL mit der jeweiligen `:free`-Modell-ID. Kostenpflichtige Modelle werden im Backend abgewiesen.
 3. Starte den 60-Sekunden-PC-Check. Der Agent muss währenddessen laufen.
 4. Prüfe die eingefrorene Vorschau. Die Anfrage enthält die Frage, Durchschnitts- und Spitzenwerte, die Anzahl von Stichproben über Warnschwellen sowie Prozess-Aliase mit Spitzenwerten. Die Zuordnung mit Namen und PIDs bleibt lokal.
 5. Bestätige die Vorschau und klicke auf **Mit OpenRouter analysieren**. Der Klick erlaubt einen Sendeversuch. Für einen weiteren Versuch ist ein neuer Check erforderlich.
@@ -83,7 +85,7 @@ Alternativ unterstützt das Backend die Umgebungsvariablen `OPENROUTER_API_KEY` 
 
 Das Dashboard meldet nur, ob ein Schlüssel vorhanden ist. Die Gültigkeit wird erst beim Modellaufruf sichtbar. Deine eigene Frage wird vollständig mitgesendet. Entferne vor der Vorschau private Angaben aus deinem Text.
 
-Der Request setzt `provider.data_collection = "deny"`, `provider.zdr = true` und eine Antwortgrenze von 1200 Tokens. Verfügbarkeit und Kosten hängen vom Modell und Konto ab. Die Anfrage geht über OpenRouter an einen Modellanbieter. Die Datenschutzfilter können die Modellverfügbarkeit einschränken. Prüfe die Bedingungen der beteiligten Dienste und deine Kontoeinstellungen. [OpenRouter-Dokumentation](https://openrouter.ai/docs/guides/routing/provider-selection)
+Der Request setzt `provider.data_collection = "deny"`, `provider.zdr = true`, Preisobergrenzen von 0 für Eingabe, Ausgabe und Anfrage sowie eine Antwortgrenze von 1200 Tokens. Die Anfrage geht über OpenRouter an einen Modellanbieter. Kostenlose Modelle unterliegen Nutzungslimits. Die Datenschutzfilter können die Modellverfügbarkeit einschränken. CloudHub wechselt bei einem Fehler nicht automatisch zu einem kostenpflichtigen Modell. [OpenRouter-Dokumentation](https://openrouter.ai/docs/guides/routing/provider-selection)
 
 Checks und Vorschauen liegen vorübergehend im Arbeitsspeicher und verfallen nach zehn Minuten. Die Anwendung bietet manuelle Hinweise und Vergleichsmessungen.
 

@@ -5,6 +5,8 @@ using System.Text.RegularExpressions;
 
 internal static class PcChecks
 {
+    private static readonly string[] FreeModels =
+        ["xingchen-agi/xing4.0-29b-a4b:free", "nvidia/nemotron-3.5-super-vl:free"];
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { WriteIndented = true };
     private const string Instructions = """
         Du bist ein vorsichtiger Windows-Diagnoseassistent. Antworte auf Deutsch.
@@ -46,6 +48,8 @@ internal static class PcChecks
                 input.Model is null || input.Model.Length > 120 ||
                 !Regex.IsMatch(input.Model, @"^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.:/-]+$"))
                 return Results.BadRequest(new { message = "Bitte eine Frage (max. 2000 Zeichen) und eine gültige Modell-ID angeben." });
+            if (!FreeModels.Contains(input.Model))
+                return Results.BadRequest(new { message = "CloudHub erlaubt ausschließlich die kostenlosen Modelle aus der Auswahl." });
 
             lock (gate)
             {
@@ -86,7 +90,7 @@ internal static class PcChecks
                 {
                     model = input.Model,
                     max_tokens = 1200,
-                    provider = new { data_collection = "deny", zdr = true },
+                    provider = new { data_collection = "deny", zdr = true, max_price = new { prompt = 0, completion = 0, request = 0, image = 0 } },
                     messages = new[] {
                         new { role = "system", content = Instructions },
                         new { role = "user", content = JsonSerializer.Serialize(report, Json) }
@@ -122,7 +126,15 @@ internal static class PcChecks
                 request.Content = new StringContent(body, Encoding.UTF8, "application/json");
                 using var response = await clients.CreateClient("OpenRouter").SendAsync(request, context.RequestAborted);
                 if (!response.IsSuccessStatusCode)
-                    return Results.Json(new { message = "OpenRouter hat die Anfrage abgelehnt. Prüfe Schlüssel, Guthaben und Modellverfügbarkeit mit den Datenschutzfiltern. Für einen neuen Versuch bitte einen neuen Check starten." }, statusCode: 502);
+                {
+                    string reason = (int)response.StatusCode switch {
+                        429 => "Nutzungslimit oder Kapazitätsgrenze des kostenlosen Angebots erreicht.",
+                        404 => "Das Modell oder eine passende kostenlose Route ist derzeit mit diesen Datenschutzfiltern nicht verfügbar.",
+                        401 or 403 => "Der Schlüssel oder seine Berechtigung wurde abgelehnt.",
+                        _ => "Das kostenlose Modell konnte die Anfrage nicht ausführen."
+                    };
+                    return Results.Json(new { message = $"OpenRouter HTTP {(int)response.StatusCode}: {reason} Für einen neuen Versuch bitte später einen neuen Check starten oder das andere kostenlose Modell wählen." }, statusCode: 502);
+                }
                 using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(context.RequestAborted), cancellationToken: context.RequestAborted);
                 var content = document.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString();
                 if (string.IsNullOrWhiteSpace(content))
@@ -131,7 +143,7 @@ internal static class PcChecks
             }
             catch (Exception error) when (error is HttpRequestException or OperationCanceledException or JsonException or KeyNotFoundException or InvalidOperationException or ArgumentOutOfRangeException)
             {
-                return Results.Json(new { message = "Analyse fehlgeschlagen oder Zeitlimit erreicht. Ein Sendeversuch kann bereits Kosten verursacht haben. Bitte bei Bedarf einen neuen Check starten." }, statusCode: 502);
+                return Results.Json(new { message = "Analyse fehlgeschlagen oder Zeitlimit erreicht. Es wurde nur eine kostenlose Route angefragt. Bitte bei Bedarf einen neuen Check starten." }, statusCode: 502);
             }
         });
     }
