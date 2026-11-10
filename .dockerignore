@@ -1,0 +1,5 @@
+**
+!src/
+!src/CloudHub.Api/
+!src/CloudHub.Api/CloudHub.Api.csproj
+!src/CloudHub.Api/Program.cs

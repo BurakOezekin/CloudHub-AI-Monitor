@@ -1,0 +1,5 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/CloudHub.Api/CloudHub.Api.csproj" />
+  </Folder>
+</Solution>

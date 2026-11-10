@@ -1,0 +1,35 @@
+# .NET und lokale IDE-Einstellungen
+[Bb]in/
+[Oo]bj/
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+artifacts/
+TestResults/
+
+# Zugangsdaten, lokale Konfiguration und Zertifikate
+.env
+.env.*
+*.env
+secrets/
+secrets.json
+appsettings.*.local.json
+appsettings.Local.json
+appsettings.Development.json
+*.pfx
+*.p12
+*.pem
+*.key
+
+# Persönliche Messwerte, Diagnoseexporte und Protokolle
+local/
+data/
+diagnostics/
+logs/
+*.log
+*.etl
+*.evtx
+*.dmp
+*.binlog
