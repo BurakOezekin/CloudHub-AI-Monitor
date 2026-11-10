@@ -67,6 +67,7 @@ function render() {
   }
   if (byId("warnings").innerHTML !== content) byId("warnings").innerHTML = content;
   drawChart();
+  renderProcesses(latest?.values.processes ?? []);
 }
 
 function drawChart() {
@@ -140,3 +141,165 @@ async function refresh() {
 byId("window").addEventListener("change", drawChart);
 new ResizeObserver(drawChart).observe(chart);
 refresh();
+
+function renderProcesses(processes) {
+  const rows = [];
+  for (const process of [...processes].sort((a, b) => b.cpuPercent - a.cpuPercent || b.ramMb - a.ramMb)) {
+    const row = document.createElement("tr");
+    for (const value of [process.name, process.pid, number.format(process.cpuPercent) + " %", number.format(process.ramMb) + " MB"]) {
+      const cell = document.createElement("td");
+      cell.textContent = value;
+      row.append(cell);
+    }
+    rows.push(row);
+  }
+  if (!rows.length) {
+    const row = document.createElement("tr"), cell = document.createElement("td");
+    cell.colSpan = 4;
+    cell.textContent = "Noch keine Prozessdaten. Starte den aktuellen Windows-Agenten.";
+    row.append(cell);
+    rows.push(row);
+  }
+  byId("process-list").replaceChildren(...rows);
+}
+
+let activeCheck = null;
+let timer = null;
+let remaining = 0;
+let previousReport = null;
+let keyConfigured = false;
+
+async function api(path, body) {
+  const response = await fetch(path, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body ?? {}), signal: AbortSignal.timeout(65000)
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message ?? "Die Anfrage ist fehlgeschlagen.");
+  return data;
+}
+
+function invalidateReview() {
+  activeCheck = null;
+  byId("review").hidden = true;
+  byId("consent").checked = false;
+  byId("analyze").disabled = true;
+}
+
+for (const id of ["question", "model"]) byId(id).addEventListener("input", () => {
+  invalidateReview();
+  byId("check-status").textContent = "Frage oder Modell geändert. Bitte einen neuen Check starten.";
+});
+byId("consent").addEventListener("change", () => {
+  byId("analyze").disabled = !byId("consent").checked || !activeCheck || !keyConfigured;
+});
+
+async function loadKeyStatus() {
+  try {
+    const response = await fetch("/api/ai/status", { cache: "no-store" });
+    if (!response.ok) throw new Error();
+    keyConfigured = (await response.json()).configured;
+    byId("key-status").textContent = keyConfigured
+      ? "OpenRouter-Key im Backend eingerichtet."
+      : "Key fehlt. Richte ihn lokal mit scripts/Set-OpenRouter.ps1 ein und starte die API neu. Messen und Vorschau funktionieren bereits.";
+  } catch {
+    byId("key-status").textContent = "Schlüsselstatus konnte nicht abgerufen werden.";
+  }
+}
+loadKeyStatus();
+
+byId("start-check").addEventListener("click", async () => {
+  const question = byId("question").value.trim(), model = byId("model").value.trim();
+  if (!question || !/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.:/-]+$/.test(model)) {
+    byId("check-status").textContent = "Bitte beschreibe dein Problem und trage die Modell-ID ein.";
+    return;
+  }
+  if (!online || !snapshot?.latest || serverTime() - Date.parse(snapshot.latest.receivedAt) > 15000) {
+    byId("check-status").textContent = "Bitte zuerst den Windows-Agenten starten und eine aktuelle Messung abwarten.";
+    return;
+  }
+  invalidateReview();
+  byId("answer-section").hidden = true;
+  byId("start-check").disabled = true;
+  byId("check-inputs").disabled = true;
+  try {
+    const check = await api("/api/checks");
+    activeCheck = check.id;
+    const deadline = performance.now() + 61000;
+    remaining = 61;
+    byId("cancel-check").hidden = false;
+    byId("check-status").textContent = "Messung läuft – noch 60 Sekunden.";
+    timer = setInterval(async () => {
+      remaining = Math.max(0, Math.ceil((deadline - performance.now()) / 1000));
+      byId("check-status").textContent = "Messung läuft – noch " + remaining + " Sekunden.";
+      if (remaining > 0) return;
+      clearInterval(timer);
+      timer = null;
+      byId("cancel-check").hidden = true;
+      byId("check-status").textContent = "Datenvorschau wird erstellt …";
+      try {
+        const preview = await api("/api/checks/" + check.id + "/preview", { question, model });
+        byId("preview").textContent = JSON.stringify(preview.body, null, 2);
+        byId("aliases").textContent = preview.aliases.map(item => item.alias + " = " + item.name + " (PID " + item.pid + ")").join("\n") || "Keine lesbaren Prozesse im Messfenster.";
+        const report = JSON.parse(preview.body.messages[1].content);
+        byId("comparison").textContent = compareReports(previousReport, report);
+        previousReport = report;
+        byId("review").hidden = false;
+        byId("check-status").textContent = "Messung beendet. Prüfe die Vorschau vor dem Senden.";
+        await loadKeyStatus();
+      } catch (error) {
+        activeCheck = null;
+        byId("check-status").textContent = error.message;
+      } finally {
+        byId("start-check").disabled = false;
+        byId("check-inputs").disabled = false;
+      }
+    }, 250);
+  } catch (error) {
+    byId("check-status").textContent = error.message;
+    byId("start-check").disabled = false;
+    byId("check-inputs").disabled = false;
+  }
+});
+
+byId("cancel-check").addEventListener("click", () => {
+  clearInterval(timer);
+  timer = null;
+  invalidateReview();
+  byId("cancel-check").hidden = true;
+  byId("start-check").disabled = false;
+  byId("check-inputs").disabled = false;
+  byId("check-status").textContent = "PC-Check abgebrochen.";
+});
+
+function compareReports(before, after) {
+  if (!before) return "Starte nach einer manuellen Änderung einen weiteren Check, um die Durchschnittswerte zu vergleichen. Der Vergleich bleibt bis zum Neuladen lokal in dieser Seite.";
+  return "Änderung zum vorherigen Check: " + [
+    ["CPU", "cpu"], ["RAM", "ram"], ["Speicherplatz", "diskUsed"]
+  ].map(([label, key]) => {
+    if (before[key].averagePercent === null || after[key].averagePercent === null) return label + " ohne Vergleichswert";
+    const delta = after[key].averagePercent - before[key].averagePercent;
+    return label + " " + (delta > 0 ? "+" : "") + number.format(delta) + " Prozentpunkte";
+  }).join(" · ") + ". Verwende für den Vergleich möglichst dieselbe Aufgabe und Belastung.";
+}
+
+byId("analyze").addEventListener("click", async () => {
+  if (!activeCheck || !byId("consent").checked || !keyConfigured) return;
+  const id = activeCheck;
+  activeCheck = null;
+  byId("analyze").disabled = true;
+  byId("start-check").disabled = true;
+  byId("check-inputs").disabled = true;
+  byId("check-status").textContent = "Analyse läuft. Die geprüften Daten werden an OpenRouter gesendet …";
+  try {
+    const result = await api("/api/checks/" + id + "/analyze");
+    byId("answer").textContent = result.answer;
+    byId("answer-section").hidden = false;
+    byId("check-status").textContent = "Analyse abgeschlossen. Für eine Rückfrage kannst du deine Frage anpassen und einen neuen Check starten.";
+  } catch (error) {
+    byId("check-status").textContent = error.message;
+  } finally {
+    byId("start-check").disabled = false;
+    byId("check-inputs").disabled = false;
+  }
+});

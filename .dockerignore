@@ -3,6 +3,8 @@
 !src/CloudHub.Api/
 !src/CloudHub.Api/CloudHub.Api.csproj
 !src/CloudHub.Api/Program.cs
+!src/CloudHub.Api/PcChecks.cs
+!src/CloudHub.Api/MonitoringModels.cs
 !src/CloudHub.Api/wwwroot/
 !src/CloudHub.Api/wwwroot/index.html
 !src/CloudHub.Api/wwwroot/dashboard.css

@@ -40,6 +40,35 @@
         <div id="warnings" aria-live="polite">Warte auf die erste Messung.</div>
       </section>
     </div>
+    <section class="panel process-panel" aria-labelledby="process-heading">
+      <div class="panel-title"><h2 id="process-heading">Prozesse auf deinem PC</h2></div>
+      <p class="help">Top 5 nach CPU und Top 5 nach RAM · Nur lokal sichtbar. Geschützte und beendete Prozesse können fehlen.</p>
+      <div class="table-scroll"><table><thead><tr><th>Prozess</th><th>PID</th><th>CPU</th><th>RAM</th></tr></thead><tbody id="process-list"></tbody></table></div>
+    </section>
+    <section class="panel check-panel" aria-labelledby="check-heading">
+      <div class="panel-title"><h2 id="check-heading">PC-Assistent</h2><span class="count">OpenRouter</span></div>
+      <p class="help">Beschreibe dein Problem und miss eine Minute. Prüfe danach die Datenvorschau. Die Analyse wird durch deinen Klick an OpenRouter und einen Modellanbieter gesendet und kann Kosten verursachen.</p>
+      <p id="key-status" class="help" role="status"></p>
+      <fieldset id="check-inputs">
+        <label for="question">Was möchtest du herausfinden?</label>
+        <textarea id="question" maxlength="2000" rows="3" placeholder="Beim Programmieren mit Browser und Docker ruckelt mein Laptop. Welche Schritte kann ich prüfen?"></textarea>
+        <label for="model">OpenRouter-Modell-ID</label>
+        <input id="model" maxlength="120" autocomplete="off" value="openai/gpt-5-mini" placeholder="anbieter/modellname">
+        <p class="help">Die Modell-ID findest du auf der Modellseite bei OpenRouter. Dein Text wird mitgesendet. Entferne persönliche Angaben vor dem Start.</p>
+      </fieldset>
+      <div class="actions"><button id="start-check" type="button">60-Sekunden-PC-Check starten</button><button id="cancel-check" class="secondary" type="button" hidden>Abbrechen</button></div>
+      <p id="check-status" class="help" role="status"></p>
+      <div id="review" hidden>
+        <h3>Datenvorschau</h3>
+        <p class="help">Dies ist der vollständige Anfrageinhalt. Prozessnamen und PIDs sind durch lokale Aliase ersetzt. Deine eigene Frage wird unverändert als Text übertragen.</p>
+        <pre id="preview"></pre>
+        <details><summary>Alias-Zuordnung · bleibt lokal</summary><pre id="aliases"></pre></details>
+        <div id="comparison" class="help"></div>
+        <p><label class="consent"><input id="consent" type="checkbox">Ich habe die Vorschau geprüft und möchte sie mit diesem Modell analysieren lassen.</label></p>
+        <button id="analyze" type="button" disabled>Mit OpenRouter analysieren</button>
+      </div>
+      <div id="answer-section" hidden><h3>Analyse und mögliche nächste Schritte</h3><p class="help">Prüfe Vorschläge vor jeder manuellen Änderung. Eine Wiederholungsmessung zeigt Veränderungen der Auslastung.</p><pre id="answer" class="answer"></pre></div>
+    </section>
     <footer><span class="foot-dot" aria-hidden="true"></span>Lokaler Windows-Agent <span class="separator">/</span> Aktualisierung alle 5 Sekunden</footer>
     <noscript>Bitte aktiviere JavaScript, um das Dashboard zu laden.</noscript>
   </main>

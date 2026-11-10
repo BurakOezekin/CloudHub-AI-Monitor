@@ -50,7 +50,7 @@ Ohne `-- --once` misst der Agent fortlaufend etwa alle fünf Sekunden. Mit `Strg
 | `ramPercent` | Aktuell belegter Anteil des physischen RAM | Windows liefert den ungefähren Prozentwert über `GlobalMemoryStatusEx`. |
 | `diskUsedPercent` | Belegter Speicherplatz auf dem Windows-Systemlaufwerk | Vergleiche Gesamtkapazität und freien Platz im Explorer unter **Dieser PC**. |
 
-Der HTTP-Anfragekörper besteht aus diesen drei Zahlen. Der Agent benutzt die feste Loopback-Adresse `127.0.0.1`. Die API ergänzt die Empfangszeit. Der Verlauf zeigt bis zu zwei Minuten und umfasst maximal 120 Messpunkte. Die letzte gültige Messung bleibt bis zum Neustart abrufbar. Die Daten liegen im Arbeitsspeicher.
+Der HTTP-Anfragekörper enthält die drei Systemwerte und die lokal erfassten Top-Prozesse. Der Agent benutzt die feste Loopback-Adresse `127.0.0.1`. Die API ergänzt die Empfangszeit. Der Verlauf zeigt bis zu zwei Minuten und umfasst maximal 120 Messpunkte. Die letzte gültige Messung bleibt bis zum Neustart abrufbar. Die Daten liegen im Arbeitsspeicher.
 
 ## Warnung im Dashboard testen
 
@@ -62,6 +62,35 @@ Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:5080/api/metrics' -Content
 
 Beim nächsten Abruf zeigt das Dashboard „Arbeitsspeicher erhöht“. Wiederhole den Aufruf mit `84.9` für RAM, um die Warnung aufzuheben. Die Startwerte für die Regeln sind CPU ≥ 90 %, RAM ≥ 85 % und belegter Speicherplatz ≥ 90 %. Nach 15 Sekunden ohne neue Messung kennzeichnet die Oberfläche den letzten Stand als veraltet.
 
+## PC-Assistent mit OpenRouter
+
+Die Prozessliste zeigt die jeweils fünf größten Verbraucher nach CPU und RAM. CPU-Prozentwerte beziehen sich auf die gesamte CPU-Kapazität. RAM wird als Working Set gemessen. Gemeinsam genutzte Speicherseiten können in mehreren Prozessen enthalten sein. Die Liste ist deshalb keine Aufteilung des gesamten RAM. Geschützte oder inzwischen beendete Prozesse können fehlen. In einer eingeschränkten Ausführungsumgebung ist nur eine Teilmenge der Prozesse sichtbar.
+
+1. Beschreibe dein Problem im Fragefeld.
+2. Wähle die exakte OpenRouter-Modell-ID. Vorausgewählt ist `openai/gpt-5-mini`. Du kannst sie vor dem Start ändern.
+3. Starte den 60-Sekunden-PC-Check. Der Agent muss währenddessen laufen.
+4. Prüfe die eingefrorene Vorschau. Die Anfrage enthält die Frage, Durchschnitts- und Spitzenwerte, die Anzahl von Stichproben über Warnschwellen sowie Prozess-Aliase mit Spitzenwerten. Die Zuordnung mit Namen und PIDs bleibt lokal.
+5. Bestätige die Vorschau und klicke auf **Mit OpenRouter analysieren**. Der Klick erlaubt einen Sendeversuch. Für einen weiteren Versuch ist ein neuer Check erforderlich.
+6. Prüfe die Antwort und setze eine passende Änderung selbst um. Starte unter vergleichbarer Last erneut einen Check. Das Dashboard vergleicht Durchschnittswerte mit dem vorigen Check auf dieser Seite. Neuladen löscht den Vergleich.
+
+Eine Rückfrage stellst du durch Anpassen des Fragefelds und einen neuen Check. Die API sendet die neue Frage und die aktuelle Zusammenfassung. Die Antwort wird als Text dargestellt.
+
+### Schlüssel lokal einrichten
+
+Führe im Projektordner `.\scripts\Set-OpenRouter.ps1` aus. Das Skript fragt den Schlüssel verdeckt ab und speichert ihn in `src/CloudHub.Api/appsettings.Local.json`. Diese Datei ist ignoriert und wird beim Publish ausgeschlossen. Starte anschließend die API neu. Eine vorhandene Konfiguration überschreibt das Skript nicht.
+
+Alternativ unterstützt das Backend die Umgebungsvariablen `OPENROUTER_API_KEY` und `OpenRouter__ApiKey`. Bei Docker wird der Schlüssel zur Laufzeit als Umgebungsvariable gesetzt, etwa mit `--env OPENROUTER_API_KEY`, wenn sie im startenden Terminal gesetzt ist. Das Image enthält die lokale Schlüsseldatei aufgrund der eingeschränkten Docker-Build-Dateiliste nicht.
+
+Das Dashboard meldet nur, ob ein Schlüssel vorhanden ist. Die Gültigkeit wird erst beim Modellaufruf sichtbar. Deine eigene Frage wird vollständig mitgesendet. Entferne vor der Vorschau private Angaben aus deinem Text.
+
+Der Request setzt `provider.data_collection = "deny"`, `provider.zdr = true` und eine Antwortgrenze von 1200 Tokens. Verfügbarkeit und Kosten hängen vom Modell und Konto ab. Die Anfrage geht über OpenRouter an einen Modellanbieter. Die Datenschutzfilter können die Modellverfügbarkeit einschränken. Prüfe die Bedingungen der beteiligten Dienste und deine Kontoeinstellungen. [OpenRouter-Dokumentation](https://openrouter.ai/docs/guides/routing/provider-selection)
+
+Checks und Vorschauen liegen vorübergehend im Arbeitsspeicher und verfallen nach zehn Minuten. Die Anwendung bietet manuelle Hinweise und Vergleichsmessungen.
+
+### KI-Ablauf testen
+
+Führe `dotnet run --project .\tests\CloudHub.Checks.Smoke` aus. Der Integrationstest startet einen lokalen Testserver mit simulierter Uhr und simuliertem OpenRouter. Er prüft Messfenster, Datenlücken, Anonymisierung, Übereinstimmung zwischen Vorschau und Anfrage, Einmalversand, fehlenden Schlüssel und Ablauf. Er benötigt keinen echten Schlüssel und sendet keine Anfrage an OpenRouter.
+
 ## Den Code verstehen
 
 | Datei | Aufgabe |
@@ -69,6 +98,9 @@ Beim nächsten Abruf zeigt das Dashboard „Arbeitsspeicher erhöht“. Wiederho
 | `CloudHub.AI.Monitor.slnx` | Bündelt die .NET-Projekte. Dadurch kannst du im Hauptordner mit einem Befehl bauen. |
 | `src/CloudHub.Api/CloudHub.Api.csproj` | Wählt das Web-SDK und .NET 10 als Zielplattform. |
 | `src/CloudHub.Agent/WindowsMetrics.cs` | Liest Windows-Zähler und berechnet die drei Prozentwerte. |
+| `src/CloudHub.Agent/ProcessSnapshot.cs` | Erfasst erreichbare Prozesse zweimal und berechnet deren CPU-Verbrauch im Messintervall. |
+| `src/CloudHub.Api/PcChecks.cs` | Erstellt die Zusammenfassung, friert die Vorschau ein und sendet sie auf Anforderung an OpenRouter. |
+| `src/CloudHub.Api/MonitoringModels.cs` | Definiert die Datenformen für Messungen, Prozesse und Warnungen. |
 | `src/CloudHub.Agent/Program.cs` | Steuert Messintervall und HTTP-Versand. Mit `--once` lässt sich ein Durchlauf isoliert testen. |
 | `src/CloudHub.Api/Program.cs` | Liest den JSON-Anfragekörper in einen `SystemMeasurement` ein und prüft die Prozentwerte. Der POST-Handler ersetzt bei Erfolg die letzte Messung. Der GET-Handler liest sie wieder aus. |
 | `src/CloudHub.Api/wwwroot/` | Enthält die HTML-Startseite, das Stylesheet und das JavaScript. Der Browser ruft `GET /api/dashboard` ab und zeichnet die Werte und die vom Backend ermittelten Warnungen. |
@@ -99,5 +131,5 @@ Prüfe vor jedem Commit die tatsächlich vorgemerkten Inhalte mit `git diff --ca
 
 ## Nächste Lernschritte
 
-1. Die optionale Analyse ergänzen. Eine Vorschau im Dashboard zeigt die freigegebenen Prozentwerte und ausgelösten Regelkennungen. Erst der Klick auf **Mit OpenRouter analysieren** soll diese Angaben über das Backend an OpenRouter senden. Der API-Schlüssel wird als lokale Umgebungsvariable des Backends gesetzt.
+1. Den Container lokal mit Docker testen.
 2. Den Container in einem lokalen Kubernetes-Cluster bereitstellen und den Build mit GitHub Actions automatisieren.

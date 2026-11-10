@@ -1,13 +1,14 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 
-internal sealed record SystemMeasurement(decimal CpuPercent, decimal RamPercent, decimal DiskUsedPercent);
+internal sealed record SystemMeasurement(decimal CpuPercent, decimal RamPercent, decimal DiskUsedPercent, ProcessReading[] Processes);
 
 internal static class WindowsMetrics
 {
     internal static async Task<SystemMeasurement> SampleAsync()
     {
         var start = ReadCpuTimes();
+        using var processes = new ProcessSnapshot();
         await Task.Delay(TimeSpan.FromSeconds(1));
         var end = ReadCpuTimes();
 
@@ -29,7 +30,7 @@ internal static class WindowsMetrics
             throw new IOException("Das Systemlaufwerk meldet keine Kapazität.");
 
         decimal diskUsed = Math.Round(100m * (capacity - systemDrive.TotalFreeSpace) / capacity, 1);
-        return new SystemMeasurement(cpu, memory.MemoryLoad, diskUsed);
+        return new SystemMeasurement(cpu, memory.MemoryLoad, diskUsed, processes.Finish());
     }
 
     private static (long Idle, long Total) ReadCpuTimes()

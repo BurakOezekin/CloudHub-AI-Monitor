@@ -3,6 +3,8 @@ WORKDIR /src
 COPY src/CloudHub.Api/CloudHub.Api.csproj ./
 RUN dotnet restore CloudHub.Api.csproj
 COPY src/CloudHub.Api/Program.cs ./
+COPY src/CloudHub.Api/PcChecks.cs ./
+COPY src/CloudHub.Api/MonitoringModels.cs ./
 COPY src/CloudHub.Api/wwwroot/ ./wwwroot/
 RUN dotnet publish CloudHub.Api.csproj -c Release --no-restore -o /app/publish -p:UseAppHost=false
 

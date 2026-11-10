@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../src/CloudHub.Api/PcChecks.cs" Link="PcChecks.cs" />
+    <Compile Include="../../src/CloudHub.Api/MonitoringModels.cs" Link="MonitoringModels.cs" />
+  </ItemGroup>
+</Project>

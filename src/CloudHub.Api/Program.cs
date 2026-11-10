@@ -1,6 +1,10 @@
 using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 65536);
+builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true).AddEnvironmentVariables();
+builder.Services.AddHttpClient("OpenRouter", client => client.Timeout = TimeSpan.FromSeconds(60))
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull);
 var app = builder.Build();
@@ -10,6 +14,30 @@ app.UseStaticFiles();
 
 var samples = new Queue<Sample>();
 var sync = new object();
+
+app.Use(async (context, next) =>
+{
+    context.Response.Headers.CacheControl = "no-store";
+    if (context.Request.Host.Host is not ("localhost" or "127.0.0.1" or "[::1]"))
+    {
+        context.Response.StatusCode = 400;
+        return;
+    }
+    if (HttpMethods.IsPost(context.Request.Method))
+    {
+        var origin = context.Request.Headers.Origin.ToString();
+        var fetchSite = context.Request.Headers["Sec-Fetch-Site"].ToString();
+        if (fetchSite == "cross-site" || (origin.Length > 0 &&
+            origin != $"{context.Request.Scheme}://{context.Request.Host}"))
+        {
+            context.Response.StatusCode = 403;
+            return;
+        }
+    }
+    await next();
+});
+
+app.MapPcChecks(() => { lock (sync) return samples.ToArray(); });
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
@@ -24,6 +52,12 @@ app.MapPost("/api/metrics", IResult (SystemMeasurement measurement) =>
     {
         return Results.BadRequest(new { message = "ramPercent und diskUsedPercent müssen zwischen 0 und 100 liegen." });
     }
+
+    if (measurement.Processes is { } processes &&
+        (processes.Length > 10 || processes.Any(process => process is null ||
+         process.Pid <= 0 || string.IsNullOrWhiteSpace(process.Name) || process.Name.Length > 128 ||
+         process.CpuPercent is < 0 or > 100 || process.RamMb is < 0 or > 10000000)))
+        return Results.BadRequest(new { message = "Ungültige Prozessmessung." });
 
     lock (sync)
     {
@@ -71,7 +105,3 @@ static List<MetricWarning> GetWarnings(SystemMeasurement? values)
             warnings.Add(new MetricWarning(metric, threshold));
     }
 }
-
-record Sample(DateTimeOffset ReceivedAt, SystemMeasurement Values);
-record MetricWarning(string Metric, decimal Threshold);
-record SystemMeasurement(decimal? CpuPercent, decimal? RamPercent = null, decimal? DiskUsedPercent = null);
