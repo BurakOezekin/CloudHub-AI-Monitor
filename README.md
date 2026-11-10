@@ -91,7 +91,9 @@ Der Agent läuft auch bei dieser Variante direkt auf Windows. Um Messwerte an di
 
 ## Git und private Daten
 
-Speichere lokale Diagnoseexporte unter `local/`. Die Datei `.gitignore` schließt diesen Ordner sowie unter anderem `.env`, private Schlüsseldateien und Logs aus. Prüfe die Regeln mit `git check-ignore -v -- local/diagnose.json .env logs/agent.log`. Für jeden Beispielpfad sollte die passende Regel erscheinen.
+Die Anwendung hält echte Messwerte im Arbeitsspeicher. Speichere spätere lokale Exporte unter `local/`, `metrics/`, `measurements/` oder `exports/` und persönliche Bildschirmfotos unter `screenshots/`. Diese Ordner werden durch `.gitignore` ausgeschlossen. Auch Dateien wie `laptop.metrics.json` werden anhand ihres Namens ignoriert. Prüfe die Regeln mit `git check-ignore -v -- local/diagnose.json metrics/latest.json screenshots/dashboard.png laptop.metrics.json .env logs/agent.log`. Für jeden Beispielpfad sollte die passende Regel erscheinen.
+
+Git prüft bei diesen Regeln Pfade und Dateinamen. Für Inhalte in einer bereits versionierten Datei gilt weiterhin die Prüfung mit `git diff --cached`. Ein Push überträgt die Commits einschließlich ihrer Historie. Bereits eingecheckte private Daten müssen deshalb gesondert aus der Historie entfernt werden.
 
 Prüfe vor jedem Commit die tatsächlich vorgemerkten Inhalte mit `git diff --cached`. Auch eine versionierte C#-Datei oder README kann versehentlich einen Schlüssel enthalten. Für einen späteren OpenRouter-Schlüssel ist eine lokale Umgebungsvariable vorgesehen. Der Docker-Build erhält über `.dockerignore` ausschließlich die freigegebenen Projekt- und Quellcodedateien.
 

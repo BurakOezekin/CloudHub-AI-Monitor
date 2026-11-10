@@ -29,6 +29,16 @@ data/
 diagnostics/
 reports/
 logs/
+metrics/
+measurements/
+exports/
+screenshots/
+*.metrics.json
+*.metrics.csv
+*.metrics.jsonl
+*.measurements.json
+*.measurements.csv
+*.measurements.jsonl
 *.log
 *.etl
 *.evtx
