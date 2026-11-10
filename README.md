@@ -89,7 +89,9 @@ Standardmäßig ist **Streng: nur Anbieter ohne Datenspeicherung (Zero Data Rete
 
 Am 10.11.2026 lieferte `recursive/flint-v1.0:free` im Verbindungstest mit fiktiven Daten, deaktiviertem ZDR, `data_collection = "deny"` und Preisgrenze 0 eine deutsche Textantwort. OpenRouter meldete Kosten von 0. Verfügbarkeit und Nutzungslimits können sich ändern.
 
-In beiden Modi gelten Preisobergrenzen von 0 für Eingabe, Ausgabe und Anfrage sowie eine Antwortgrenze von 1200 Tokens. Kostenlose Modelle können Nutzungslimits erreichen (HTTP 429). CloudHub wechselt bei Fehlern nicht automatisch zu einem anderen Modell. [OpenRouter-Dokumentation](https://openrouter.ai/docs/guides/routing/provider-selection)
+In beiden Modi gelten Preisobergrenzen von 0 für Eingabe, Ausgabe und Anfrage sowie eine Grenze von 8192 Tokens für interne Verarbeitung und sichtbare Antwort. Kostenlose Modelle können Nutzungslimits erreichen (HTTP 429). CloudHub wechselt bei Fehlern nicht automatisch zu einem anderen Modell. [OpenRouter-Dokumentation](https://openrouter.ai/docs/guides/routing/provider-selection)
+
+Flint verlangt interne Verarbeitung (Reasoning). Das ursprüngliche Gesamtlimit von 1200 Tokens führte beim vollständigen Diagnoseprompt zu einer leeren Antwort mit `finish_reason = "length"`. Das Backend erlaubt daher 8192 Tokens und bis zu 120 Sekunden Bearbeitungszeit. Das Dashboard wartet entsprechend länger. Falls das Limit trotzdem erreicht wird, erklärt die Oberfläche den Grund oder kennzeichnet eine unvollständige Antwort.
 
 Checks und Vorschauen liegen vorübergehend im Arbeitsspeicher und verfallen nach zehn Minuten. Die Anwendung bietet manuelle Hinweise und Vergleichsmessungen.
 

@@ -89,7 +89,8 @@ internal static class PcChecks
                 var body = new
                 {
                     model = input.Model,
-                    max_tokens = 1200,
+                    // Flint benötigt Budget für obligatorisches Reasoning und sichtbare Antwort.
+                    max_tokens = 8192,
                     provider = new { data_collection = "deny", zdr = input.StrictPrivacy, max_price = new { prompt = 0, completion = 0, request = 0, image = 0 } },
                     messages = new[] {
                         new { role = "system", content = Instructions },
@@ -137,11 +138,15 @@ internal static class PcChecks
                     return Results.Json(new { message = $"OpenRouter HTTP {(int)response.StatusCode}: {reason} Du kannst dieselbe Vorschau später erneut senden. Für andere Modell- oder Datenschutzeinstellungen bitte einen neuen Check starten." }, statusCode: 502);
                 }
                 using var document = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(context.RequestAborted), cancellationToken: context.RequestAborted);
-                var content = document.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString();
+                var choice = document.RootElement.GetProperty("choices")[0];
+                bool truncated = choice.TryGetProperty("finish_reason", out var finishReason) && finishReason.GetString() == "length";
+                var content = choice.GetProperty("message").GetProperty("content").GetString();
                 if (string.IsNullOrWhiteSpace(content))
-                    return Results.Json(new { message = "Das Modell hat keine Textantwort geliefert." }, statusCode: 502);
+                    return Results.Json(new { message = truncated
+                        ? "Das Modell hat sein Tokenlimit für interne Verarbeitung ausgeschöpft, bevor eine sichtbare Antwort entstand. Versuche eine kürzere Frage oder einen anderen kostenlosen Anbieter."
+                        : "Das Modell hat keine Textantwort geliefert. Du kannst die Vorschau erneut senden." }, statusCode: 502);
                 lock (gate) checks.Remove(id);
-                return Results.Ok(new { answer = content });
+                return Results.Ok(new { answer = content, truncated });
             }
             catch (Exception error) when (error is HttpRequestException or OperationCanceledException or JsonException or KeyNotFoundException or InvalidOperationException or ArgumentOutOfRangeException)
             {

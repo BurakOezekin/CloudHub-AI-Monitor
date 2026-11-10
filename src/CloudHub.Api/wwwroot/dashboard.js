@@ -174,7 +174,7 @@ let keyConfigured = false;
 async function api(path, body) {
   const response = await fetch(path, {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body ?? {}), signal: AbortSignal.timeout(65000)
+    body: JSON.stringify(body ?? {}), signal: AbortSignal.timeout(125000)
   });
   const data = await response.json();
   if (!response.ok) throw new Error(data.message ?? "Die Anfrage ist fehlgeschlagen.");
@@ -298,7 +298,9 @@ byId("analyze").addEventListener("click", async () => {
     activeCheck = null;
     byId("answer").textContent = result.answer;
     byId("answer-section").hidden = false;
-    byId("check-status").textContent = "Analyse abgeschlossen. Für eine Rückfrage kannst du deine Frage anpassen und einen neuen Check starten.";
+    byId("check-status").textContent = result.truncated
+      ? "Die Antwort wurde am Tokenlimit abgeschnitten. Für eine vollständigere Antwort kannst du die Frage kürzen und einen neuen Check starten."
+      : "Analyse abgeschlossen. Für eine Rückfrage kannst du deine Frage anpassen und einen neuen Check starten.";
   } catch (error) {
     byId("check-status").textContent = error.message;
   } finally {

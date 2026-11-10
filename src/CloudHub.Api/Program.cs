@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 var builder = WebApplication.CreateBuilder(args);
 builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 65536);
 builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true).AddEnvironmentVariables();
-builder.Services.AddHttpClient("OpenRouter", client => client.Timeout = TimeSpan.FromSeconds(60))
+builder.Services.AddHttpClient("OpenRouter", client => client.Timeout = TimeSpan.FromSeconds(120))
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull);

@@ -30,6 +30,8 @@ try
     await Expect(previewResponse, HttpStatusCode.OK);
     using var preview = JsonDocument.Parse(await previewResponse.Content.ReadAsStringAsync());
     string expectedBody = preview.RootElement.GetProperty("body").GetRawText();
+    if (preview.RootElement.GetProperty("body").GetProperty("max_tokens").GetInt32() < 8192)
+        throw new Exception("Reasoning-Budget für Flint ist zu klein.");
     var prices = preview.RootElement.GetProperty("body").GetProperty("provider").GetProperty("max_price");
     if (prices.GetProperty("prompt").GetInt32() != 0 || prices.GetProperty("completion").GetInt32() != 0 ||
         prices.GetProperty("request").GetInt32() != 0)
@@ -46,12 +48,18 @@ try
     handler.Status = HttpStatusCode.TooManyRequests;
     await Expect(await client.PostAsJsonAsync($"/api/checks/{check}/analyze", new { }), HttpStatusCode.BadGateway);
     handler.Status = HttpStatusCode.OK;
+    handler.ResponseBody = """{"choices":[{"finish_reason":"length","message":{"content":""}}]}""";
+    var exhausted = await client.PostAsJsonAsync($"/api/checks/{check}/analyze", new { });
+    await Expect(exhausted, HttpStatusCode.BadGateway);
+    if (!(await exhausted.Content.ReadAsStringAsync()).Contains("Tokenlimit"))
+        throw new Exception("Tokenlimit wird nicht erklärt.");
+    handler.ResponseBody = """{"choices":[{"finish_reason":"stop","message":{"content":"Simulierte Antwort."}}]}""";
     await Expect(await client.PostAsJsonAsync($"/api/checks/{check}/analyze", new { }), HttpStatusCode.OK);
-    if (handler.Calls != 2 || !System.Text.Json.Nodes.JsonNode.DeepEquals(
+    if (handler.Calls != 3 || !System.Text.Json.Nodes.JsonNode.DeepEquals(
         System.Text.Json.Nodes.JsonNode.Parse(handler.Body!), System.Text.Json.Nodes.JsonNode.Parse(expectedBody)))
         throw new Exception("Gesendeter Inhalt weicht von der Vorschau ab.");
     await Expect(await client.PostAsJsonAsync($"/api/checks/{check}/analyze", new { }), HttpStatusCode.Conflict);
-    if (handler.Calls != 2) throw new Exception("Doppelter Modellaufruf nach Erfolg.");
+    if (handler.Calls != 3) throw new Exception("Doppelter Modellaufruf nach Erfolg.");
 
     var standard = await Start();
     started = clock.GetUtcNow();
@@ -70,7 +78,7 @@ try
 
     builder.Configuration["OpenRouter:ApiKey"] = "";
     await Expect(await client.PostAsJsonAsync($"/api/checks/{Guid.NewGuid()}/analyze", new { }), HttpStatusCode.ServiceUnavailable);
-    if (handler.Calls != 2) throw new Exception("Aufruf ohne Key.");
+    if (handler.Calls != 3) throw new Exception("Aufruf ohne Key.");
     var expired = await Start();
     clock.Advance(601);
     await Expect(await Preview(expired), HttpStatusCode.NotFound);
@@ -102,6 +110,7 @@ sealed class FakeRouter : HttpMessageHandler
     internal int Calls;
     internal string? Body;
     internal HttpStatusCode Status = HttpStatusCode.OK;
+    internal string ResponseBody = """{"choices":[{"message":{"content":"Simulierte Antwort."}}]}""";
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         Calls++;
@@ -110,7 +119,7 @@ sealed class FakeRouter : HttpMessageHandler
             throw new Exception("Falsches Ziel oder Authentifizierung.");
         Body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(cancellationToken)).RootElement.ToString();
         return new HttpResponseMessage(Status) {
-            Content = new StringContent("""{"choices":[{"message":{"content":"Simulierte Antwort."}}]}""", Encoding.UTF8, "application/json")
+            Content = new StringContent(ResponseBody, Encoding.UTF8, "application/json")
         };
     }
 }
