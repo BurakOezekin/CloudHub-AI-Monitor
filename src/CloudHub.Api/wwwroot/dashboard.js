@@ -81,9 +81,14 @@ function drawChart() {
   chart.height = Math.round(height * ratio);
   ctx.scale(ratio, ratio);
   const left = 36, right = width - 6, top = 10, bottom = height - 24;
-  const end = serverTime(), seconds = Number(byId("window").value), start = end - seconds * 1000;
-  const history = (snapshot?.history ?? []).filter(point => Date.parse(point.receivedAt) >= start);
-  byId("plot-empty").hidden = history.length > 0;
+  const selected = byId("window").value, range = ranges[selected];
+  const end = serverTime(), seconds = range ? range.seconds : Number(selected), start = end - seconds * 1000;
+  const source = range ? (stored?.range === selected ? stored.points : []) : snapshot?.history ?? [];
+  const history = source.filter(point => Date.parse(point.receivedAt) >= start);
+  const maxGap = range ? Math.max(15000, seconds * 1000 / 240 * 2.5) : 15000;
+  const plotEmpty = byId("plot-empty");
+  plotEmpty.hidden = history.length > 0;
+  plotEmpty.textContent = range && storedError ? storedError : "Noch keine Messpunkte";
   ctx.font = '11px "Segoe UI", sans-serif';
   for (const percent of [100, 75, 50, 25, 0]) {
     const y = bottom - (bottom - top) * percent / 100;
@@ -96,7 +101,8 @@ function drawChart() {
     ctx.lineTo(right, y);
     ctx.stroke();
   }
-  for (const [fraction, label] of [[0, "−" + seconds + " s"], [0.5, "−" + seconds / 2 + " s"], [1, "Jetzt"]]) {
+  const ago = value => range ? "−" + number.format(value / range.unit) + " " + range.label : "−" + value + " s";
+  for (const [fraction, label] of [[0, ago(seconds)], [0.5, ago(seconds / 2)], [1, "Jetzt"]]) {
     ctx.textAlign = fraction === 0 ? "left" : fraction === 1 ? "right" : "center";
     ctx.fillText(label, left + fraction * (right - left), height - 4);
   }
@@ -112,7 +118,7 @@ function drawChart() {
       const time = Date.parse(point.receivedAt);
       const x = left + (time - start) / (end - start) * (right - left);
       const y = bottom - value / 100 * (bottom - top);
-      if (previous && time - previous.time <= 15000) {
+      if (previous && time - previous.time <= maxGap) {
         ctx.beginPath();
         ctx.moveTo(previous.x, previous.y);
         ctx.lineTo(x, y);
@@ -140,7 +146,40 @@ async function refresh() {
   setTimeout(refresh, 5000);
 }
 
-byId("window").addEventListener("change", drawChart);
+const ranges = {
+  "1h": { seconds: 3600, unit: 60, label: "min" },
+  "24h": { seconds: 86400, unit: 3600, label: "h" },
+  "7d": { seconds: 604800, unit: 86400, label: "Tage" }
+};
+let stored = null;
+let storedError = "";
+let storedAt = 0;
+
+async function loadStoredHistory(force) {
+  const selected = byId("window").value;
+  if (!ranges[selected] || (!force && stored?.range === selected && performance.now() - storedAt < 30000)) return;
+  try {
+    const response = await fetch("/api/history?range=" + encodeURIComponent(selected), { cache: "no-store", signal: AbortSignal.timeout(8000) });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message ?? "HTTP " + response.status);
+    stored = {
+      range: data.range,
+      points: data.points.map(point => ({
+        receivedAt: point.at,
+        values: { cpuPercent: point.cpuPercent, ramPercent: point.ramPercent, diskUsedPercent: point.diskUsedPercent }
+      }))
+    };
+    storedError = "";
+  } catch (error) {
+    stored = null;
+    storedError = "Gespeicherter Verlauf nicht verfügbar: " + error.message;
+  }
+  storedAt = performance.now();
+  drawChart();
+}
+
+byId("window").addEventListener("change", () => { drawChart(); loadStoredHistory(true); });
+setInterval(() => loadStoredHistory(false), 5000);
 new ResizeObserver(drawChart).observe(chart);
 refresh();
 

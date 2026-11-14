@@ -12,7 +12,8 @@ Der optionale PC-Assistent fasst eine Minute Messdaten zusammen. Vor einer Analy
 
 - CPU-Auslastung, RAM-Belegung und belegter Speicherplatz des Windows-Systemlaufwerks.
 - Prozessübersicht mit den jeweils fünf größten Verbrauchern nach CPU und RAM.
-- Dashboard mit automatischer Aktualisierung, kurzem Verlauf und Warnungen.
+- Dashboard mit automatischer Aktualisierung, Live-Verlauf und Warnungen.
+- Gespeicherte Messhistorie in SQLite mit Ansichten für 1 Stunde, 24 Stunden und 7 Tage.
 - 60-Sekunden-PC-Check mit Fragefeld, Datenvorschau und optionaler KI-Analyse.
 - Vergleich der Durchschnittswerte zweier Checks innerhalb einer Browsersitzung.
 
@@ -23,6 +24,7 @@ flowchart LR
     W[Windows-System] --> A[C# Agent]
     A -->|HTTP POST /api/metrics| API[ASP.NET Core API]
     API --> M[(Arbeitsspeicher)]
+    API --> D[(SQLite-Historie)]
     B[Web-Dashboard] -->|HTTP GET /api/dashboard| API
     API -->|Messwerte und Warnungen| B
     B -->|Geprüfte Analyse anfordern| API
@@ -58,6 +60,7 @@ Das Dashboard ist unter [http://127.0.0.1:5081](http://127.0.0.1:5081) erreichba
 | POST | `/api/metrics` | Messung validieren und übernehmen |
 | GET | `/api/metrics/latest` | Letzte gültige Messung abrufen |
 | GET | `/api/dashboard` | Verlauf und Warnungen abrufen |
+| GET | `/api/history?range=1h` | Gespeicherten Verlauf abrufen (`1h`, `24h`, `7d`) |
 | POST | `/api/checks` | PC-Check beginnen |
 | POST | `/api/checks/{id}/preview` | Diagnosevorschau erstellen |
 | POST | `/api/checks/{id}/analyze` | Geprüfte Vorschau an OpenRouter senden |
@@ -93,8 +96,11 @@ Flint benötigt Budget für interne Verarbeitung und sichtbare Antwort. Die Anfr
 
 ## Daten und Sicherheit
 
-- Messwerte, Prozessdaten und Analysevorschauen liegen im Arbeitsspeicher. Es gibt keine Datenbank oder automatischen Diagnoseexporte.
-- Der Verlauf umfasst bis zu zwei Minuten und maximal 120 Messpunkte. Checks verfallen nach zehn Minuten.
+- CPU-, RAM- und Speicherplatzwerte werden zusätzlich in einer lokalen SQLite-Datei gespeichert. Prozessnamen, PIDs, Fragen und Analysevorschauen werden nicht gespeichert und bleiben im Arbeitsspeicher.
+- Die Datenbank liegt standardmäßig unter `%LOCALAPPDATA%\CloudHub\cloudhub.db` und damit außerhalb des Projektordners. Der Pfad lässt sich mit `Storage__DatabasePath` ändern.
+- Gespeicherte Messwerte werden nach sieben Tagen gelöscht. Die Frist lässt sich mit `Storage__RetentionDays` (1 bis 365) ändern. Zum vollständigen Löschen die API beenden und die Datenbankdatei entfernen.
+- Für längere Zeiträume liefert die API Durchschnittswerte mit höchstens 240 Punkten. Ist die Datei nicht beschreibbar, läuft die API ohne Speicherung weiter und schreibt eine Warnung ins Log.
+- Der Live-Verlauf umfasst bis zu zwei Minuten und maximal 120 Messpunkte. Nach einem Neustart wird er aus der Datenbank gefüllt. Checks verfallen nach zehn Minuten.
 - Lokale Schlüsseldateien, Logs und Exportordner werden von Git ausgeschlossen. Der Docker-Build erhält ausschließlich die freigegebenen Quelldateien.
 - Persönliche Exporte gehören nach `local/`, `metrics/`, `measurements/` oder `exports/`. Persönliche Bildschirmfotos gehören nach `screenshots/`.
 - Die API enthält keine Benutzeranmeldung. Die dokumentierten Startbefehle binden sie an die Loopback-Adresse. Vor einer Bereitstellung über das Internet sind Authentifizierung und weitere Zugriffskontrollen erforderlich.
@@ -115,7 +121,7 @@ dotnet build --configuration Release
 dotnet run --project .\tests\CloudHub.Checks.Smoke --configuration Release
 ```
 
-Der Integrationstest verwendet eine simulierte Uhr und einen simulierten OpenRouter-Handler. Er prüft Messfenster, Datenlücken, Anonymisierung, Datenvorschau, kostenlose Preisgrenzen, Datenschutzwahl, Wiederholung nach Fehlern, Tokenlimit und abgelaufene Checks. Ein echter Schlüssel oder eine externe Anfrage wird dafür nicht benötigt.
+Der Integrationstest verwendet eine simulierte Uhr und einen simulierten OpenRouter-Handler. Er prüft Messfenster, Datenlücken, Anonymisierung, Datenvorschau, kostenlose Preisgrenzen, Datenschutzwahl, Wiederholung nach Fehlern, Tokenlimit und abgelaufene Checks. Für die Messhistorie prüft er Speichern, erneutes Öffnen, Durchschnittsbildung, Aufbewahrungsfrist und dass keine Prozessdaten in der Datei landen. Ein echter Schlüssel oder eine externe Anfrage wird dafür nicht benötigt.
 
 ## Docker
 
@@ -128,6 +134,8 @@ docker build -t cloudhub-api:local .
 docker run --rm --name cloudhub-api -p 127.0.0.1:5081:8080 cloudhub-api:local
 ```
 
+Ohne Volume liegt die Messhistorie im Container und geht beim Entfernen verloren. Der Container speichert sie unter `/data/cloudhub.db`. Für eine dauerhafte Historie ein Volume einbinden, zum Beispiel mit `-v cloudhub-data:/data` im `docker run`-Befehl.
+
 Der Windows-Agent kann weiterhin über `.\scripts\Start-Agent.ps1 -Port 5081` senden. Für optionale KI-Aufrufe kann der Container den Schlüssel zur Laufzeit als Umgebungsvariable erhalten. Ein bereits im Terminal gesetztes `OPENROUTER_API_KEY` wird mit `--env OPENROUTER_API_KEY` weitergegeben.
 
 **Stand der Prüfung** — .NET-Build, Windows-Messung, lokale API, Dashboard und KI-Ablauf wurden getestet. Der Docker-Start wurde in der bisherigen Entwicklungsumgebung mangels Docker Engine noch nicht ausgeführt.
@@ -136,6 +144,6 @@ Der Windows-Agent kann weiterhin über `.\scripts\Start-Agent.ps1 -Port 5081` se
 
 CPU-Werte beruhen auf einem Messfenster und können von der Task-Manager-Anzeige abweichen. Prozess-RAM bezeichnet das Working Set. Gemeinsam genutzte Speicherseiten können in mehreren Prozessen enthalten sein. Geschützte oder beendete Prozesse können in der Übersicht fehlen.
 
-Die Anwendung ist ein lokaler MVP. Nach einem Backend-Neustart beginnt die Messhistorie erneut. Eine KI-Antwort liefert mögliche Erklärungen; Anpassungen am Rechner werden manuell durchgeführt.
+Die Anwendung ist ein lokaler MVP. Die gespeicherte Historie enthält nur Systemwerte, keine Prozessübersicht. Eine KI-Antwort liefert mögliche Erklärungen; Anpassungen am Rechner werden manuell durchgeführt.
 
-Als nächste Schritte sind ein vollständiger Docker-Funktionstest, persistente Messhistorie, GitHub Actions und eine lokale Kubernetes-Bereitstellung vorgesehen.
+Als nächste Schritte sind ein vollständiger Docker-Funktionstest, GitHub Actions und eine lokale Kubernetes-Bereitstellung vorgesehen.

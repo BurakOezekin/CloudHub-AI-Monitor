@@ -7,5 +7,9 @@
   <ItemGroup>
     <Compile Include="../../src/CloudHub.Api/PcChecks.cs" Link="PcChecks.cs" />
     <Compile Include="../../src/CloudHub.Api/MonitoringModels.cs" Link="MonitoringModels.cs" />
+    <Compile Include="../../src/CloudHub.Api/MetricStore.cs" Link="MetricStore.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.11" />
   </ItemGroup>
 </Project>
