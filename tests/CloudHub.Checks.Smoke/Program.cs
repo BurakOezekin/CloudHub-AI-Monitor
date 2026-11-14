@@ -82,9 +82,49 @@ try
     var expired = await Start();
     clock.Advance(601);
     await Expect(await Preview(expired), HttpStatusCode.NotFound);
-    Console.WriteLine("PASS: Messfenster, Datenlücken, Anonymisierung, exakte Vorschau, Einmalversand, fehlender Key und Ablauf.");
+    TestMetricStore();
+    Console.WriteLine("PASS: Messfenster, Datenlücken, Anonymisierung, exakte Vorschau, Einmalversand, fehlender Key, Ablauf und Messhistorie.");
 }
 finally { await app.StopAsync(); }
+
+static void TestMetricStore()
+{
+    var folder = Path.Combine(Path.GetTempPath(), "cloudhub-test-" + Guid.NewGuid());
+    var path = Path.Combine(folder, "history.db");
+    try
+    {
+        var storeClock = new TestClock();
+        var store = new MetricStore(path, TimeSpan.FromDays(1), storeClock);
+        var begin = storeClock.GetUtcNow();
+        store.Add(new Sample(begin.AddDays(-2), new SystemMeasurement(99, 99, 99)));
+        for (var index = 0; index < 720; index++)
+            store.Add(new Sample(begin.AddSeconds(index * 5), new SystemMeasurement(index % 2 == 0 ? 10 : 30, 50, null,
+                [new ProcessReading(4242, "PRIVATE-PROCESS-XYZ", 1, 1)])));
+        storeClock.Advance(3600);
+
+        var reopened = new MetricStore(path, TimeSpan.FromDays(1), storeClock);
+        var points = reopened.History(TimeSpan.FromHours(1));
+        if (points.Length is 0 or > 240 || points.Sum(point => point.Samples) != 720)
+            throw new Exception($"Messhistorie unvollständig: {points.Length} Punkte.");
+        var cpuAverage = points.Sum(point => point.CpuPercent!.Value * point.Samples) / 720;
+        if (Math.Abs(cpuAverage - 20) > 0.1m || points.Any(point => point.CpuMaxPercent != 30 ||
+            point.RamPercent != 50 || point.DiskUsedPercent is not null))
+            throw new Exception("Durchschnitt oder Lücke in der Messhistorie falsch.");
+        if (reopened.History(TimeSpan.FromDays(7)).Sum(point => point.Samples) != 720)
+            throw new Exception("Alte Messwerte wurden nicht nach der Aufbewahrungsfrist gelöscht.");
+        if (reopened.Since(storeClock.GetUtcNow().AddMinutes(-2)).Length != 24 ||
+            reopened.Since(begin.AddSeconds(3591)).Single().Values.CpuPercent != 30)
+            throw new Exception("Rohwerte nach Neustart falsch.");
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+        if (File.ReadAllText(path).Contains("PRIVATE-PROCESS-XYZ"))
+            throw new Exception("Prozessdaten wurden dauerhaft gespeichert.");
+    }
+    finally
+    {
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+        if (Directory.Exists(folder)) Directory.Delete(folder, true);
+    }
+}
 
 async Task<Guid> Start()
 {
