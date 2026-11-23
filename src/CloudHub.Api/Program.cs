@@ -15,6 +15,19 @@ app.UseStaticFiles();
 var samples = new Queue<Sample>();
 var sync = new object();
 
+MetricStore? store = null;
+try
+{
+    store = MetricStore.FromConfiguration(app.Configuration);
+    foreach (var sample in store.Since(DateTimeOffset.UtcNow.AddMinutes(-2)).TakeLast(120))
+        samples.Enqueue(sample);
+    app.Logger.LogInformation("Messhistorie wird gespeichert in {Path}", store.DatabasePath);
+}
+catch (Exception error)
+{
+    app.Logger.LogWarning(error, "Messhistorie kann nicht gespeichert werden. Die API läuft ohne Speicherung weiter.");
+}
+
 app.Use(async (context, next) =>
 {
     context.Response.Headers.CacheControl = "no-store";
@@ -59,13 +72,15 @@ app.MapPost("/api/metrics", IResult (SystemMeasurement measurement) =>
          process.CpuPercent is < 0 or > 100 || process.RamMb is < 0 or > 10000000)))
         return Results.BadRequest(new { message = "Ungültige Prozessmessung." });
 
+    var sample = new Sample(DateTimeOffset.UtcNow, measurement);
     lock (sync)
     {
-        var now = DateTimeOffset.UtcNow;
-        samples.Enqueue(new Sample(now, measurement));
-        while (samples.Count > 120 || samples.Peek().ReceivedAt < now.AddMinutes(-2))
+        samples.Enqueue(sample);
+        while (samples.Count > 120 || samples.Peek().ReceivedAt < sample.ReceivedAt.AddMinutes(-2))
             samples.Dequeue();
     }
+    try { store?.Add(sample); }
+    catch (Exception error) { app.Logger.LogWarning(error, "Messwert konnte nicht gespeichert werden."); }
     return Results.Ok(measurement);
 });
 
@@ -87,6 +102,15 @@ app.MapGet("/api/dashboard", () =>
         var history = samples.Where(sample => sample.ReceivedAt >= now.AddMinutes(-2)).ToArray();
         return Results.Ok(new { now, latest, history, warnings = GetWarnings(latest?.Values) });
     }
+});
+
+app.MapGet("/api/history", IResult (string? range) =>
+{
+    if (store is null)
+        return Results.Json(new { message = "Die Messhistorie ist nicht verfügbar." }, statusCode: 503);
+    if (!MetricStore.Ranges.TryGetValue(range ?? "1h", out var span))
+        return Results.BadRequest(new { message = "range muss 1h, 24h oder 7d sein." });
+    return Results.Ok(new { now = DateTimeOffset.UtcNow, range = range ?? "1h", points = store.History(span) });
 });
 
 app.Run();
