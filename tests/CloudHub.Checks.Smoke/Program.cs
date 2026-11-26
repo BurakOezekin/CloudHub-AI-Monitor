@@ -13,10 +13,27 @@ await using var app = builder.Build();
 var clock = new TestClock();
 Sample[] samples = [];
 app.MapPcChecks(() => samples, clock);
+app.MapInfrastructure();
 await app.StartAsync();
 using var client = new HttpClient(new HttpClientHandler { UseProxy = false }) { BaseAddress = new Uri(app.Urls.Single()) };
 try
 {
+    await Expect(await client.GetAsync("/api/infrastructure"), HttpStatusCode.NotFound);
+    await Expect(await client.PostAsJsonAsync("/api/infrastructure", new { }), HttpStatusCode.BadRequest);
+    var disabledInfra = new { status = "disabled", metrics = "notRequested", total = 0, rows = Array.Empty<object>() };
+    var dockerInfra = new { status = "ok", metrics = "available", total = 1,
+        rows = new[] { new { name = "web", state = "running", detail = "Up", cpu = "2%", memory = "50MiB" } } };
+    await Expect(await client.PostAsJsonAsync("/api/infrastructure", new
+        { docker = dockerInfra, pods = disabledInfra, nodes = disabledInfra }), HttpStatusCode.OK);
+    using (var infrastructure = JsonDocument.Parse(await client.GetStringAsync("/api/infrastructure")))
+    {
+        if (infrastructure.RootElement.GetProperty("stale").GetBoolean() ||
+            infrastructure.RootElement.GetProperty("docker").GetProperty("total").GetInt32() != 1)
+            throw new Exception("Infrastructure snapshot missing.");
+    }
+    var invalidInfra = new { status = "ok", metrics = "available", total = 2, rows = Array.Empty<object>() };
+    await Expect(await client.PostAsJsonAsync("/api/infrastructure", new
+        { docker = invalidInfra, pods = disabledInfra, nodes = disabledInfra }), HttpStatusCode.BadRequest);
     var check = await Start();
     await Expect(await client.PostAsJsonAsync($"/api/checks/{check}/preview",
         new { question = "Testfrage", model = "openai/gpt-5-mini" }), HttpStatusCode.BadRequest);

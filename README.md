@@ -147,3 +147,44 @@ CPU-Werte beruhen auf einem Messfenster und können von der Task-Manager-Anzeige
 Die Anwendung ist ein lokaler MVP. Die gespeicherte Historie enthält nur Systemwerte, keine Prozessübersicht. Eine KI-Antwort liefert mögliche Erklärungen; Anpassungen am Rechner werden manuell durchgeführt.
 
 Als nächste Schritte sind ein vollständiger Docker-Funktionstest, GitHub Actions und eine lokale Kubernetes-Bereitstellung vorgesehen.
+
+
+## Docker- und Kubernetes-Monitoring
+
+Optionaler, separater Collector (Python 3.9+, keine Pakete). Er verwendet ausschließlich
+lesende Docker-/kubectl-Kommandos auf dem Host und sendet die letzte Übersicht an die lokale
+CloudHub-API. Keine Docker-Socket-Mounts, Kubeconfig oder CLI-Installation im API-Container.
+Keine Logs, Umgebungsvariablen, Secrets oder KI-Übertragung. Die bestehenden PC-Messungen bleiben unverändert.
+
+1. Docker Desktop oder eine vertrauenswürdige Docker-CLI-Verbindung einrichten; für Kubernetes
+   kubectl und einen bereits funktionierenden Kontext mit Leserechten für Pods und Nodes.
+2. Verfügbare Kontexte anzeigen: `docker context ls` und `kubectl config get-contexts`.
+3. API wie oben auf 127.0.0.1 starten. In einem zweiten Terminal (Beispiele: die tatsächlichen Kontextnamen einsetzen):
+
+```powershell
+python scripts/infrastructure_monitor.py --docker-context desktop-linux --kube-context docker-desktop --namespace default --port 5081
+```
+
+Nur Docker: `python scripts/infrastructure_monitor.py --docker-context desktop-linux`.
+Nur Kubernetes: `python scripts/infrastructure_monitor.py --kube-context docker-desktop --namespace default`.
+`--once` sendet eine einzelne Übersicht. `--interval` (10–30 Sekunden) ist die Pause nach jeder Sammlung.
+Der Windows-Agent kann unabhängig weiterlaufen. Das Dashboard zeigt Container (auch gestoppte),
+Pods eines gewählten Namespace (Ready/Restarts/Fehlerzustände) und Nodes sowie CPU/RAM, falls
+Docker Stats bzw. Kubernetes Metrics API verfügbar sind. Docker zeigt CPU in Prozent und
+Speicherverbrauch/Limit; Kubernetes zeigt CPU (z. B. m = Millicores) und Speicher (z. B. Mi).
+Kubernetes-Nutzungsmetriken benötigen eine funktionierende Metrics API (z. B. metrics-server)
+und passende Leseberechtigungen. Fehlende Werte bleiben leer, fehlende Rechte oder CLI werden
+als nicht erreichbar angezeigt. Die Datenquellen werden getrennt ausgewertet; pro Quelle werden
+maximal 25 Einträge alphabetisch angezeigt, mit Gesamtzahl. Ein einzelner Collector überschreibt
+die letzte Übersicht, keine Historie und kein Multi-Cluster-Aggregat. Nach 90 Sekunden ohne
+neue Übersicht erscheint ein Veraltet-Hinweis.
+
+Wenn die API in Docker läuft, Port ausschließlich lokal veröffentlichen (z. B.
+`-p 127.0.0.1:5081:8080`) und den Collector weiterhin auf dem Host starten.
+Die lokale API ist kein authentifizierter öffentlicher Dienst; nicht für LAN/Internet freigeben.
+Docker-Zugriff ist privilegiert: nur vertrauenswürdige Kontexte und Nutzer verwenden, für
+Kubernetes einen möglichst eingeschränkten Lesezugang. Der Collector ändert keine Ressourcen.
+Live-Tests mit Docker Desktop und einem echten Cluster sind zusätzlich zu den CI-Tests nötig.
+
+Tests: `python -m unittest discover -s tests/infrastructure -v` und
+`dotnet run --project tests/CloudHub.Checks.Smoke`.
