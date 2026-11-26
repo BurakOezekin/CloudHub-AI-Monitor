@@ -51,6 +51,7 @@ app.Use(async (context, next) =>
 });
 
 app.MapPcChecks(() => { lock (sync) return samples.ToArray(); });
+app.MapInfrastructure();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 

@@ -1,0 +1,23 @@
+name: Infrastructure monitoring checks
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: dotnet build CloudHub.AI.Monitor.slnx
+      - run: dotnet run --project tests/CloudHub.Checks.Smoke --no-build
+      - run: python -m unittest discover -s tests/infrastructure -v
+      - run: node --check src/CloudHub.Api/wwwroot/infrastructure.js
+      - run: docker build -t cloudhub-ci .

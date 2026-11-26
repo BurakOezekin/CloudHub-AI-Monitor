@@ -8,6 +8,7 @@
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/dashboard.css">
   <script src="/dashboard.js" defer></script>
+  <script src="/infrastructure.js" defer></script>
 </head>
 <body>
   <header class="topbar">
@@ -49,6 +50,11 @@
       <div class="panel-title"><h2 id="process-heading">Prozesse auf deinem PC</h2></div>
       <p class="help">Top 5 nach CPU und Top 5 nach RAM · Nur lokal sichtbar. Geschützte und beendete Prozesse können fehlen.</p>
       <div class="table-scroll"><table><thead><tr><th>Prozess</th><th>PID</th><th>CPU</th><th>RAM</th></tr></thead><tbody id="process-list"></tbody></table></div>
+    </section>
+    <section class="panel process-panel" aria-labelledby="infra-heading">
+      <div class="panel-title"><h2 id="infra-heading">Docker &amp; Kubernetes</h2></div>
+      <p class="help" id="infrastructure-status" role="status">Warte auf Collector …</p>
+      <div id="infrastructure"></div>
     </section>
     <section class="panel check-panel" aria-labelledby="check-heading">
       <div class="panel-title"><h2 id="check-heading">PC-Assistent</h2><span class="count">OpenRouter</span></div>

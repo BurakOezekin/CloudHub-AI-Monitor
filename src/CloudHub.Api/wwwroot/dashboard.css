@@ -110,3 +110,7 @@ pre.answer { font: inherit; font-size: 14px; line-height: 1.7; max-height: none;
 h3 { font-size: 17px; }
 summary { cursor: pointer; font-size: 13px; color: #526675; }
 .consent { display: flex; align-items: flex-start; gap: 8px; margin: 20px 0; font-size: 14px; line-height: 1.5; }
+
+.infra-source { margin-top: 20px; }
+.infra-source h3 { font-size: 16px; margin-bottom: 5px; }
+.infra-source td:first-child { overflow-wrap: anywhere; max-width: 320px; }
