@@ -3,4 +3,7 @@
     <Project Path="src/CloudHub.Agent/CloudHub.Agent.csproj" />
     <Project Path="src/CloudHub.Api/CloudHub.Api.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/CloudHub.Checks.Smoke/CloudHub.Checks.Smoke.csproj" />
+  </Folder>
 </Solution>
